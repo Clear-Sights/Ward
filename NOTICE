@@ -1,0 +1,12 @@
+Ward
+Copyright 2026 Clear-Sights
+
+This product includes software developed as part of the Clear-Sights project
+(https://github.com/Clear-Sights).
+
+Portions of this software (11 checks in ward/checks.py) are ported by SHAPE — read and
+reimplemented, never imported — from Detent (1 check: outbound_secret_pattern) and Makoto
+(10 checks: forbidden_location, timing_unsafe_compare, jwt_none_alg, jwt_signature_disabled,
+cert_verify_disabled, cert_reqs_none, cert_none_mode, paramiko_host_key_weakened), both also
+Clear-Sights projects; the additional Makoto ports are self_mute_guard and
+integrity_suppression_flag.

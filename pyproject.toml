@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ward"
+version = "0.1.0"
+description = "11 exact, no-substitute PreToolUse hard denies for actions dangerous regardless of intent or honesty"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.setuptools]
+license-files = ["LICENSE", "NOTICE"]
+
+[tool.setuptools.packages.find]
+include = ["ward*"]
+
+["tests"]
+pythonpath = ["."]

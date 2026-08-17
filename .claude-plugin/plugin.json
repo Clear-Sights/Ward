@@ -1,0 +1,10 @@
+{
+  "name": "ward",
+  "description": "9 exact, no-substitute PreToolUse hard denies for actions that are dangerous regardless of intent or honesty: weakened TLS/JWT/host-key verification, timing-unsafe secret comparison, protected-path writes, outbound secret leaks. Sibling to Detent (determination) and Makoto (sincerity).",
+  "version": "0.1.0",
+  "author": {"name": "Clear-Sights"},
+  "homepage": "https://github.com/Clear-Sights/Ward",
+  "repository": "https://github.com/Clear-Sights/Ward",
+  "license": "Apache-2.0",
+  "keywords": ["claude-code", "security", "hooks", "safety", "ward"]
+}
