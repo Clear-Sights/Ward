@@ -17,6 +17,18 @@ class RepositoryHygiene(unittest.TestCase):
             "remove the unreferenced path-resolution development report before shipping",
         )
 
+    def test_no_render_scratch_directories_are_tracked(self):
+        """render_readme_images.py works in a mkdtemp under docs/img; a committed one ships a
+        whole headless-Chromium profile (History, Web Data, Login Data databases) as repository
+        content. Three such directories were found tracked and removed; this pins the removal."""
+        import subprocess
+        tracked = subprocess.run(
+            ["git", "-C", str(REPO), "ls-files", "docs/img"],
+            capture_output=True, text=True, check=True,
+        ).stdout.splitlines()
+        strays = [line for line in tracked if ".ward-readme-images-" in line]
+        self.assertEqual(strays, [], "render scratch directories are tracked: remove them")
+
     def test_security_guide_uses_the_supported_stdlib_test_command(self):
         guide = (REPO / "SECURITY.md").read_text(encoding="utf-8")
         documented_command = "$ python -m unittest discover -s tests -p 'test_path_reliability.py'"
