@@ -1,6 +1,6 @@
 {
   "name": "ward",
-  "description": "9 exact, no-substitute PreToolUse hard denies for actions that are dangerous regardless of intent or honesty: weakened TLS/JWT/host-key verification, timing-unsafe secret comparison, protected-path writes, outbound secret leaks. Sibling to Detent (determination) and Makoto (sincerity).",
+  "description": "11 exact, no-substitute PreToolUse hard denies for actions that are dangerous regardless of intent or honesty: weakened TLS/JWT/host-key verification, timing-unsafe secret comparison, protected-path writes, outbound secret leaks, verifier removal, integrity-suppression flags. Sibling to Makoto (statements) and Gyroscope (sequences).",
   "version": "0.1.0",
   "author": {"name": "Clear-Sights"},
   "homepage": "https://github.com/Clear-Sights/Ward",

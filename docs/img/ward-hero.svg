@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="210" viewBox="0 0 1200 210" role="img" aria-labelledby="title desc">
+  <title id="title">Ward</title>
+  <desc id="desc">Ward — nothing outright bad happens</desc>
+  <style>
+    .background { fill: #f6f8fa; }
+    .border { fill: none; stroke: #d0d7de; }
+    .grid { stroke: #d8dee4; }
+    .shield { fill: #0969da; }
+    .shield-cut { fill: #f6f8fa; }
+    .name { fill: #1f2328; }
+    .purpose { fill: #59636e; }
+    .rule { stroke: #0969da; }
+    @media (prefers-color-scheme: dark) {
+      .background { fill: #0d1117; }
+      .border { stroke: #30363d; }
+      .grid { stroke: #21262d; }
+      .shield { fill: #58a6ff; }
+      .shield-cut { fill: #0d1117; }
+      .name { fill: #f0f6fc; }
+      .purpose { fill: #b1bac4; }
+      .rule { stroke: #58a6ff; }
+    }
+  </style>
+
+  <rect class="background" x="1" y="1" width="1198" height="208" rx="18"/>
+  <rect class="border" x="1" y="1" width="1198" height="208" rx="18"/>
+
+  <g class="grid" opacity="0.62" stroke-width="1">
+    <path d="M24 36H1176 M24 174H1176"/>
+    <path d="M214 18V192 M1080 18V192"/>
+  </g>
+
+  <path class="shield" d="M111 29L176 52V101C176 140 151 169 111 185C71 169 46 140 46 101V52L111 29Z"/>
+  <path class="shield-cut" d="M78 72H94L111 117L128 72H144L118 139H103L78 72Z"/>
+
+  <line class="rule" x1="240" y1="62" x2="305" y2="62" stroke-width="5" stroke-linecap="round"/>
+  <text class="name" x="238" y="125" font-family="system-ui, sans-serif" font-size="72" font-weight="800" letter-spacing="8">WARD</text>
+  <text class="purpose" x="243" y="166" font-family="system-ui, sans-serif" font-size="27" font-weight="500" letter-spacing="0.5">nothing outright bad happens</text>
+
+  <g transform="translate(1010 74)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <circle class="border" cx="35" cy="31" r="30" stroke-width="2"/>
+    <path class="rule" d="M20 31L30 41L51 20" stroke-width="5"/>
+  </g>
+</svg>
