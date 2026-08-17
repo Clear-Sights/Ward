@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parent.parent
 IMAGE_DIR = ROOT / "docs" / "img"
 CHROMIUM = Path("/opt/pw-browsers/chromium")
 SCALE = 2
+MINIMUM_WINDOW = 600
+VIEWPORT_SLACK = 200
 MINIMUM_PNG_BYTES = 10 * 1024
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 DARK_MEDIA_START = re.compile(
@@ -83,6 +85,11 @@ def _themed_svg(svg_text: str, source: Path, *, dark: bool) -> str:
 def _wrapper(svg: Path, width: int, height: int, *, dark: bool) -> str:
     source = html.escape(svg.resolve().as_uri(), quote=True)
     background = "#0d1117" if dark else "#ffffff"
+    # The 2x factor is baked into the CSS size rather than passed as
+    # --force-device-scale-factor: under --headless=new that flag scales the
+    # content but not the capture viewport, clipping the bottom-right of every
+    # image (observed and bisected on this Chromium build).
+    scaled_width, scaled_height = width * SCALE, height * SCALE
     return f"""<!doctype html>
 <html>
 <head>
@@ -90,12 +97,12 @@ def _wrapper(svg: Path, width: int, height: int, *, dark: bool) -> str:
   <style>
     html, body {{
       margin: 0;
-      width: {width}px;
-      height: {height}px;
+      width: {scaled_width}px;
+      height: {scaled_height}px;
       overflow: hidden;
       background: {background};
     }}
-    img {{ display: block; width: {width}px; height: {height}px; }}
+    img {{ display: block; width: {scaled_width}px; height: {scaled_height}px; }}
   </style>
 </head>
 <body><img src="{source}" alt=""></body>
@@ -118,8 +125,11 @@ def _render(
         f"--user-data-dir={profile_dir}",
         "--hide-scrollbars",
         f"--screenshot={output}",
-        f"--window-size={width},{height}",
-        f"--force-device-scale-factor={SCALE}",
+        # --headless=new reserves an 88px strip of the window for browser UI
+        # (measured: every capture's viewport is window-height minus exactly
+        # 88px) and also clamps small window heights. Render with generous
+        # headroom and crop to the exact size afterwards.
+        f"--window-size={width * SCALE},{max(height * SCALE + VIEWPORT_SLACK, MINIMUM_WINDOW)}",
         wrapper.resolve().as_uri(),
     ]
     result = subprocess.run(command, capture_output=True, text=True, check=False)
@@ -132,6 +142,22 @@ def _render(
         )
     if not output.is_file():
         raise RuntimeError(f"Chromium did not create {output}")
+    _crop(output, width * SCALE, height * SCALE)
+
+
+def _crop(path: Path, width: int, height: int) -> None:
+    """Trim the minimum-window padding down to the exact target size."""
+    from PIL import Image
+
+    with Image.open(path) as image:
+        if image.size == (width, height):
+            return
+        if image.size[0] < width or image.size[1] < height:
+            raise RuntimeError(
+                f"{path}: captured {image.size[0]}x{image.size[1]}, "
+                f"smaller than the target {width}x{height}"
+            )
+        image.crop((0, 0, width, height)).save(path)
 
 
 def _png_dimensions(path: Path) -> tuple[int, int]:
