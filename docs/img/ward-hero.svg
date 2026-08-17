@@ -32,7 +32,7 @@
   </g>
 
   <path class="shield" d="M111 29L176 52V101C176 140 151 169 111 185C71 169 46 140 46 101V52L111 29Z"/>
-  <path class="shield-cut" d="M78 72H94L111 117L128 72H144L118 139H103L78 72Z"/>
+  <path class="shield-cut" d="M77 72L94 139L111 105L128 139L145 72H130L122 113L111 90L100 113L92 72Z"/>
 
   <line class="rule" x1="240" y1="62" x2="305" y2="62" stroke-width="5" stroke-linecap="round"/>
   <text class="name" x="238" y="125" font-family="system-ui, sans-serif" font-size="72" font-weight="800" letter-spacing="8">WARD</text>

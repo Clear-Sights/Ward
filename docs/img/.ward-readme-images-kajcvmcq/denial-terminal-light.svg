@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="390" viewBox="0 0 1200 390" role="img" aria-labelledby="title desc">
+  <title id="title">A real Ward certificate-verification denial</title>
+  <desc id="desc"><![CDATA[ward.cert_verify_disabled: Denied (TLS/certificate verification disabled (verify=False / unverified SSL context)): verify=False at line 1. Don't disable TLS verification — the peer-identity check becomes a no-op while the call still 'succeeds'. Use proper certs (or pin a CA). If legitimate, annotate the line `ward-allow: <reason>`.]]></desc>
+  <style>
+    .page { fill: #f6f8fa; }
+    .terminal { fill: #ffffff; stroke: #d0d7de; }
+    .bar { fill: #eaeef2; }
+    .ink { fill: #1f2328; }
+    .muted { fill: #59636e; }
+    .prompt { fill: #1a7f37; }
+    .deny { fill: #cf222e; }
+    .chip { fill: #fff1f0; stroke: #cf222e; }
+    
+  </style>
+
+  <rect class="page" x="1" y="1" width="1198" height="388" rx="18"/>
+  <rect class="terminal" x="25" y="22" width="1150" height="346" rx="14" stroke-width="2"/>
+  <path class="bar" d="M39 22H1161A14 14 0 0 1 1175 36V72H25V36A14 14 0 0 1 39 22Z"/>
+  <circle cx="55" cy="47" r="7" fill="#ff5f57"/>
+  <circle cx="79" cy="47" r="7" fill="#febc2e"/>
+  <circle cx="103" cy="47" r="7" fill="#28c840"/>
+  <text class="muted" x="600" y="53" text-anchor="middle" font-family="monospace" font-size="14">ward · PreToolUse</text>
+
+  <text class="prompt" x="52" y="108" font-family="monospace" font-size="17" font-weight="700">$</text>
+  <text class="ink" x="76" y="108" font-family="monospace" font-size="17">Write app.py: requests.get(url, verify=False)</text>
+
+  <rect class="chip" x="52" y="130" width="70" height="28" rx="14"/>
+  <text class="deny" x="87" y="149" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" font-weight="750">DENY</text>
+  <text class="muted" x="137" y="149" font-family="monospace" font-size="14">permissionDecisionReason · exact output, terminal-wrapped</text>
+
+  <text class="ink" x="52" y="190" font-family="monospace" font-size="16">
+    <tspan x="52" dy="0">ward.cert_verify_disabled: Denied (TLS/certificate verification disabled</tspan>
+    <tspan x="52" dy="27">(verify=False / unverified SSL context)): verify=False at line 1. Don't disable TLS</tspan>
+    <tspan x="52" dy="27">verification — the peer-identity check becomes a no-op while the call still 'succeeds'.</tspan>
+    <tspan x="52" dy="27">Use proper certs (or pin a CA). If legitimate, annotate the line `ward-allow:</tspan>
+    <tspan x="52" dy="27">&lt;reason&gt;`.</tspan>
+  </text>
+
+  <text class="muted" x="52" y="343" font-family="monospace" font-size="14">process exit 0 · the host reads the deny decision</text>
+</svg>

@@ -1,12 +1,28 @@
 # Ward
 
-![Ward — nothing outright bad happens](docs/img/ward-hero.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/ward-hero-dark.png">
+  <img src="docs/img/ward-hero-light.png" alt="Ward — nothing outright bad happens">
+</picture>
 
-**Nothing outright bad happens.** Ward is a Claude Code `PreToolUse` plugin: an ordered 11-row
-table of exact denials over the pending tool call. A match denies with a citation and a retry
-hint; anything else is a silent `{}`. No state, no history, no configuration.
+## The problem
 
-## Install
+Under pressure, an agent can take the shortcut that turns a red test green:
+`requests.get(url, verify=False)`; `algorithms=["none"]`; `set_missing_host_key_policy(AutoAddPolicy)`;
+or deleting the failing verifier. Each is one tool call that looks like progress and is dangerous
+regardless of intent or honesty. Review sees it only after it happened.
+Ward sits before the act: the call is denied with a citation and a retry hint before it executes.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/denial-terminal-dark.png">
+  <img src="docs/img/denial-terminal-light.png" alt="A terminal showing Ward's real certificate-verification denial">
+</picture>
+
+## Quickstart
+
+Ward is a Claude Code `PreToolUse` plugin: an ordered 11-row table of exact denials over the
+pending tool call. A match denies with a citation and a retry hint; anything else is a silent
+`{}`. No state, no history, no configuration.
 
 Ward requires Python 3.11 or newer and has no Python package dependencies. From a local checkout:
 
@@ -20,8 +36,6 @@ the plugin metadata in [.claude-plugin/plugin.json](.claude-plugin/plugin.json).
 [hooks/hooks.json](hooks/hooks.json), which sends every `PreToolUse` event through the single
 [hooks/dispatch.sh](hooks/dispatch.sh) entrypoint. The shim pins execution to the plugin root and
 runs `python3 -m ward.dispatch`; there is no separate package-install step for the hook.
-
-![A terminal showing Ward's real certificate-verification denial](docs/img/denial-terminal.svg)
 
 To exercise that same bridge without modifying a file:
 
@@ -57,7 +71,10 @@ four use path text, serialized outbound payloads, or introduced-versus-removed m
 
 ## How dispatch works
 
-![Pending tool call through Ward's single entrypoint and 11-row denial table](docs/img/dispatch-flow.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/dispatch-flow-dark.png">
+  <img src="docs/img/dispatch-flow-light.png" alt="Pending tool call through Ward's single entrypoint and 11-row denial table">
+</picture>
 
 [ward/dispatch.py](ward/dispatch.py) reads one JSON event. For a `PreToolUse` event, it applies the
 mutation-input preflight where relevant, then evaluates the rows in order and emits one of two
