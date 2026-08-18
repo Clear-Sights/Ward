@@ -1,0 +1,49 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run the gates
+        run: |
+          python3 -m unittest discover -s tests
+          python3 eval/replay.py
+
+      - name: Build the install bundle (no eval, no tests, no tooling)
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          STAGE="ward-$VERSION"
+          mkdir "$STAGE"
+          cp -r ward hooks pyproject.toml LICENSE NOTICE README.md SECURITY.md "$STAGE"/
+          zip -qr "ward-$VERSION.zip" "$STAGE"
+          unzip -l "ward-$VERSION.zip" | grep -q "eval/" && exit 1 || true
+
+      - name: Create tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          TAG="v$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "ward $VERSION"
+          git push origin "$TAG"
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes "Stateless PreToolUse deny table: 11 predicate rows plus a cannot-evaluate preflight, every denial cited and carrying a retry hint. Verified at release time: the 82-test suite and the 6/6 corpus replay (\`python3 eval/replay.py\`). Install from \`ward-$VERSION.zip\` — it carries the dispatcher, hooks, and manifests only; the eval corpus and tests live in the repository, not the release bundle." \
+            "ward-$VERSION.zip"
