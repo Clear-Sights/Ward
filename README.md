@@ -127,7 +127,9 @@ The full boundary and one named reachable bypass for every row are documented in
 ## Siblings
 
 Ward is one of three engines that split one taxonomy — act, sequence, statement — and share
-nothing else. Each installs alone; none inherits or implies the others' coverage.
+nothing else. Each installs alone; none inherits or implies the others' coverage. All three
+install from the [Tribunal](https://github.com/Clear-Sights/Tribunal) marketplace:
+`claude plugin marketplace add Clear-Sights/Tribunal`.
 
 | Engine | Judges | One line |
 |---|---|---|
