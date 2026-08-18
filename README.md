@@ -69,6 +69,10 @@ The seven rows from `ward.timing_unsafe_compare` through
 `ward.paramiko_host_key_weakened` parse only newly introduced Python in a `.py` mutation. The other
 four use path text, serialized outbound payloads, or introduced-versus-removed mutation text.
 
+Evaluate coverage here, not only in [Scope, precisely](#scope-precisely): NotebookEdit receives the
+`ward.forbidden_location` path check, but its cell text is **not** parsed by the seven
+introduced-Python rows.
+
 ## How dispatch works
 
 <picture>
@@ -93,7 +97,10 @@ These are wiring/input failures, not extra rows in the `CHECKS` table.
 ## Allow an intentional match
 
 The seven introduced-Python rows accept a narrow, auditable escape hatch: put a tokenized Python
-comment containing `ward-allow: <reason>` on the same source line as the matched AST node.
+comment containing `ward-allow: <reason>` on the same source line as the matched AST node. The
+annotation is written by the same agent Ward constrains, so it is an audit trail, not a control —
+the recorded reason is what a reviewer inspects afterward, not a boundary Ward enforces (the same
+trust boundary [SECURITY.md](SECURITY.md) states for every allow: never a safety verdict).
 
 ```python
 requests.get(url, verify=False)  # ward-allow: local fixture exercises an unverified endpoint
@@ -102,6 +109,24 @@ requests.get(url, verify=False)  # ward-allow: local fixture exercises an unveri
 A bare `ward-allow`, a string or docstring mention, or a comment on another line does not exempt the
 match. One annotated line does not exempt another. The path, outbound-secret, self-mute, integrity-
 suppression, and cannot-evaluate denials do not honor this annotation.
+
+## Defeats we measured and closed
+
+Two measured defeats of the `ward-allow` mechanism itself, both fixed in
+[ward/checks.py](ward/checks.py)'s `_allow_lines` and recorded in its docstring; they are repeated
+here because a defeat that lives only in a module docstring persuades nobody who reads the README.
+
+- **A string literal disarmed every other line.** The marker was once regex-scanned over the raw
+  introduced text, so `note = "ward-allow: ..."` on line 1 — a *mention*, not an annotation —
+  exempted every check on every other line. Measured before the fix: a `verify=False` call went
+  from DENIED to allowed with one unrelated string added above it, and a comment on a different
+  line did the same. After: the marker is tokenized, so only a real Python comment counts, and it
+  is bound to its own line — one annotated line does not exempt another. If the introduced text
+  cannot be tokenized, nothing is exempt: a check fires rather than being silently disarmed.
+- **Equality, never substring.** The same incident is the same lesson `_parse_introduced` already
+  encodes for the checks themselves, and the one Makoto's `location_match` states outright: a raw
+  scan cannot tell an annotation from a mention, so exemption matching must be structural
+  (tokenized, line-bound) rather than a substring hit anywhere in the chunk.
 
 ## Scope, precisely
 
@@ -135,7 +160,7 @@ install from the [Tribunal](https://github.com/Clear-Sights/Tribunal) marketplac
 |---|---|---|
 | **Ward** (this repo) | the pending **act** | nothing outright bad happens |
 | [**Gyroscope**](https://github.com/Clear-Sights/Gyroscope) | the **sequence** | a session neither capsizes nor gets lost |
-| [**Makoto**](https://github.com/Clear-Sights/makoto) | the **statement** | words aren't empty |
+| [**Makoto**](https://github.com/Clear-Sights/Makoto) | the **statement** | words aren't empty |
 
 ## Development
 
