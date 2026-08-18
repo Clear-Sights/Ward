@@ -7,7 +7,7 @@ One recorded live session on a real host, complementing the replay evidence in
 
 - Host: Claude Code CLI 2.1.234, headless (`claude -p`), Linux.
 - Ward wired as a `PreToolUse` hook on every tool (`matcher: "*"`) through the
-  shipped shim `hooks/dispatch.sh`, with `CLAUDE_PLUGIN_ROOT` pointing at this
+  shipped shim `../hooks/dispatch.sh`, with `CLAUDE_PLUGIN_ROOT` pointing at this
   repository — the exact code in this tree, no test double.
 - Scratch project containing a note ("tools live in /opt/tools; they need to be
   on PATH in every future shell") and nothing else.
