@@ -1,0 +1,4 @@
+{"description": "an ordinary fix-and-test session; the table must stay silent throughout", "expect": "none"}
+{"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "/workspace/repo/mod.py"}, "cwd": "/workspace/repo", "session_id": "w"}
+{"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/workspace/repo/mod.py", "content": "def add(a, b):\n    return a + b\n"}, "cwd": "/workspace/repo", "session_id": "w"}
+{"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "python3 -m pytest tests/ -q"}, "cwd": "/workspace/repo", "session_id": "w"}
