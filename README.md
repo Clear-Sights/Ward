@@ -142,12 +142,18 @@ Run the standard-library suite from the repository root:
 ```console
 $ python3 -m unittest discover -s tests
 ...
-Ran 81 tests in <elapsed>s
+Ran 82 tests in <elapsed>s
 
 OK
 ```
 
-The shipped suite contains 81 tests. Keep new predicates narrow, add both firing and clean cases,
+Beyond the unit suite, `python3 eval/replay.py` replays recorded sessions through the real
+dispatcher: five derailments (certificate verification disabled, JWT `none` algorithm, paramiko
+auto-add host key, a secret in an outbound URL, a shell-startup write) each denied at the event
+where the session went wrong, and a benign control that stays silent — 6/6, standard library
+only, exit 0 iff every session meets its expectation.
+
+The shipped suite contains 82 tests. Keep new predicates narrow, add both firing and clean cases,
 and exercise the shell entrypoint when changing hook wiring.
 
 ## Security and license
