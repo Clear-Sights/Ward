@@ -215,5 +215,90 @@ class TestBoundaryUnits(unittest.TestCase):
         self.assertIs(value, original)
 
 
+# --- regressions found by an independent high-effort review pass ------------------------------
+
+class TestFailClosedIsTotal(StateCase):
+    """Ward's promise is that it fails closed on EVERY envelope it cannot inspect. `main` caught
+    only `ValueError`, which is what `json.loads` raises for malformed text -- but not what it
+    raises for a document that is merely too deep."""
+
+    def test_deeply_nested_json_still_denies(self):
+        raw = b"[" * 2000 + b"0" + b"]" * 2000
+        code, body = _run(raw, self.state)
+        self.assertEqual(code, 0, "a crash exit means the hook emitted no decision at all")
+        self.assertIn("failing closed", _reason(body),
+                      "an envelope Ward could not parse must never be allowed through")
+
+    def test_the_fault_row_names_the_exception_type(self):
+        _run(b"[" * 2000 + b"0" + b"]" * 2000, self.state)
+        faults = [r for r in _rows(self.state) if r["kind"] == "fault"]
+        self.assertEqual(len(faults), 1)
+        self.assertIn("RecursionError", faults[0]["detail"])
+        self.assertIs(faults[0]["failed_closed"], True)
+
+
+class TestTheSessionRowIsExactlyOnce(StateCase):
+    """Three separate defects in one function, all of them costing the liveness row this journal
+    exists to guarantee."""
+
+    def test_ids_differing_only_in_punctuation_are_not_one_session(self):
+        """`a/b` and `a?b` both sanitized to `a_b`, so the second session was read as already
+        noted and its row was never written."""
+        from ward import journal
+        journal.note_session({"session_id": "a/b", "tool_name": "T"}, root=self.state)
+        journal.note_session({"session_id": "a?b", "tool_name": "T"}, root=self.state)
+        got = sorted(r["session_id"] for r in _rows(self.state) if r["kind"] == "session")
+        self.assertEqual(got, ["a/b", "a?b"])
+
+    def test_a_failed_append_does_not_suppress_the_row_forever(self):
+        """The marker was committed BEFORE the row, so one swallowed write error silenced this
+        session's liveness row for the rest of its life."""
+        from ward import journal
+        original = journal._append
+        journal._append = lambda *a, **k: (_ for _ in ()).throw(OSError("disk full"))
+        self.addCleanup(setattr, journal, "_append", original)
+        journal.note_session({"session_id": "s1", "tool_name": "T"}, root=self.state)
+        journal._append = original
+        journal.note_session({"session_id": "s1", "tool_name": "T"}, root=self.state)
+        self.assertEqual(len([r for r in _rows(self.state) if r["kind"] == "session"]), 1)
+
+    def test_concurrent_processes_write_one_row_between_them(self):
+        """`exists()` then write is check-then-act, and concurrent hook processes are the normal
+        condition here rather than an edge case."""
+        from ward import journal
+        kids = []
+        for _ in range(12):
+            pid = os.fork()
+            if pid == 0:
+                try:
+                    journal.note_session({"session_id": "race", "tool_name": "T"}, root=self.state)
+                finally:
+                    os._exit(0)
+            kids.append(pid)
+        for pid in kids:
+            os.waitpid(pid, 0)
+        self.assertEqual(len([r for r in _rows(self.state) if r["kind"] == "session"]), 1)
+
+
+class TestRepairCountsMeanWhatTheyAreNamed(StateCase):
+    """`repaired` counts undecodable BYTES. Summing the surrogate-ESCAPE count into it meant an
+    envelope whose bytes were flawless could report bytes repaired."""
+
+    def test_an_escape_only_envelope_reports_zero_bytes_repaired(self):
+        raw = (b'{"hook_event_name":"PreToolUse","tool_name":"Write","session_id":"w-esc",'
+               b'"cwd":"/tmp","tool_input":{"file_path":"/tmp/ok.py",'
+               b'"content":"# a\\ud89d\\nprint(1)\\n"}}')
+        _run(raw, self.state)
+        repair = [r for r in _rows(self.state) if r["kind"] == "repair"][0]
+        self.assertEqual(repair["repaired"], 0, "no byte on that wire was undecodable")
+        self.assertEqual(repair["escaped"], 1)
+
+    def test_a_byte_damaged_envelope_reports_zero_escapes(self):
+        _run(BENIGN_PY_WITH_BAD_BYTE, self.state)
+        repair = [r for r in _rows(self.state) if r["kind"] == "repair"][0]
+        self.assertEqual(repair["repaired"], 1)
+        self.assertEqual(repair["escaped"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

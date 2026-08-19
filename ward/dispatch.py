@@ -32,7 +32,7 @@ from ward.checks import evaluate
 
 
 def read_event() -> tuple[dict[str, Any], int]:
-    """Parse the hook envelope off stdin. Returns (event, bytes_repaired).
+    """Parse the hook envelope off stdin. Returns (event, undecodable_bytes, escaped_surrogates).
 
     Bytes, not text: see `ward.wire`. A lone surrogate must never reach a check, because a check
     handed one reports a fact about the encoding while claiming to report one about the action.
@@ -47,7 +47,9 @@ def read_event() -> tuple[dict[str, Any], int]:
     # escape, which json.loads materializes as a real lone surrogate. wire.read_stdin cannot see
     # that one -- the escape is plain ASCII in the raw text -- so the parsed object is scrubbed too.
     event, escaped = wire.scrub(event)
-    return event, repaired + escaped
+    # Returned SEPARATELY, never summed: one counts undecodable bytes, the other counts surrogate
+    # escapes that were valid ASCII on the wire. See `journal.note_repair`.
+    return event, repaired, escaped
 
 
 def emit(payload: dict[str, Any]) -> None:
@@ -79,20 +81,30 @@ def route(event: dict[str, Any]) -> dict[str, Any]:
 
 def main() -> int:
     try:
-        event, repaired = read_event()
-    except ValueError as e:
-        journal.note_fault({}, "unreadable_event", str(e), failed_closed=True)
-        print(f"ward.dispatch: {e}", file=sys.stderr)
+        event, repaired, escaped = read_event()
+    except Exception as e:
+        # `Exception`, NOT `ValueError`, and the difference is a hole straight through the fail
+        # direction this whole module is built on. `json.loads` raises `ValueError` for the
+        # malformed input it was written for -- but it raises `RecursionError` on a DEEPLY NESTED
+        # document, and `wire.scrub` walks the parsed value recursively and raises the same on the
+        # same input. Reproduced: 2000 nested arrays on stdin took the `ValueError` arm's escape,
+        # crashed out of `main()`, and the hook exited 1 having written NOTHING to stdout. A hook
+        # that emits no decision is a hook that allowed the call, so the one input shaped to be
+        # expensive to parse was the one input Ward did not rule on -- fail-OPEN, in the plugin
+        # whose entire premise is that it never does that. Anything read_event can raise is an
+        # envelope Ward could not inspect, and every one of them takes the same closed exit.
+        journal.note_fault({}, "unreadable_event", f"{type(e).__name__}: {e}", failed_closed=True)
+        print(f"ward.dispatch: {type(e).__name__}: {e}", file=sys.stderr)
         emit(deny(
             "ward: malformed hook input; failing closed because the pending action could not be "
             "inspected (see dispatch stderr)."
         ))
         return 0
-    if repaired:
+    if repaired or escaped:
         # Recorded, and NOT a fault: the event was evaluated, on a repaired payload. Conflating the
         # two would inflate the count of unevaluated calls, which is the number this log exists to
         # keep honest.
-        journal.note_repair(event, repaired)
+        journal.note_repair(event, repaired, escaped)
     try:
         result = route(event)
     except Exception as e:
