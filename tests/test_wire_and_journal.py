@@ -26,6 +26,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -311,22 +312,47 @@ class TestTheSessionRowIsExactlyOnce(StateCase):
         self.assertEqual(len([r for r in _rows(self.state) if r["kind"] == "session"]), 1)
 
     def test_concurrent_processes_write_one_row_between_them(self):
-        """`exists()` then write is check-then-act, and concurrent hook processes are the normal
-        condition here rather than an edge case."""
-        from ward import journal
-        kids = []
-        for _ in range(12):
-            pid = os.fork()
-            if pid == 0:
-                try:
-                    journal.note_session({"session_id": "race", "tool_name": "T"}, root=self.state)
-                finally:
-                    os._exit(0)
-            kids.append(pid)
-        for pid in kids:
-            os.waitpid(pid, 0)
-        self.assertEqual(len([r for r in _rows(self.state) if r["kind"] == "session"]), 1)
+        """`exists()` then write is check-then-act, and concurrent hook processes are the NORMAL
+        condition here rather than an edge case -- several tool calls are in flight at once.
 
+        TWO THINGS MAKE THIS A PIN RATHER THAN A COIN FLIP, and both were arrived at by measuring
+        the test against the unfixed code rather than by reasoning about it.
+
+        A PIPE, not a flag file, releases the children. Forked with no barrier at all they start
+        staggered by the cost of fork itself: 9 catches in 10 runs. Polling a flag file was WORSE,
+        8 in 10 -- each child notices the file on its own schedule, so the poll reintroduces the
+        stagger it was meant to remove. Blocking every child on one read and closing the write end
+        hands the wakeup to the kernel, which releases them together.
+
+        SEVERAL ROUNDS, because one round of a genuinely narrow window is a probabilistic check,
+        and a race test that passes on racy code one run in ten is barely a test -- the run that
+        matters is the one nobody re-runs. Each round is an independent trial, so the miss
+        probability is the per-round miss raised to the number of rounds.
+        """
+        from ward import journal
+        for round_no in range(6):
+            session = f"race-{round_no}"
+            read_fd, write_fd = os.pipe()
+            kids = []
+            for _ in range(16):
+                pid = os.fork()
+                if pid == 0:
+                    try:
+                        os.close(write_fd)
+                        os.read(read_fd, 1)   # released when the parent closes its end
+                        journal.note_session({"session_id": session, "tool_name": "T"},
+                                             root=self.state)
+                    finally:
+                        os._exit(0)
+                kids.append(pid)
+            os.close(write_fd)
+            for pid in kids:
+                os.waitpid(pid, 0)
+            os.close(read_fd)
+            rows = [r for r in _rows(self.state)
+                    if r["kind"] == "session" and r["session_id"] == session]
+            self.assertEqual(len(rows), 1,
+                             f"round {round_no}: {len(rows)} rows for one session")
 
 class TestRepairCountsMeanWhatTheyAreNamed(StateCase):
     """`repaired` counts undecodable BYTES. Summing the surrogate-ESCAPE count into it meant an
