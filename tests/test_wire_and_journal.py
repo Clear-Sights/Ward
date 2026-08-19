@@ -218,22 +218,59 @@ class TestBoundaryUnits(unittest.TestCase):
 # --- regressions found by an independent high-effort review pass ------------------------------
 
 class TestFailClosedIsTotal(StateCase):
-    """Ward's promise is that it fails closed on EVERY envelope it cannot inspect. `main` caught
-    only `ValueError`, which is what `json.loads` raises for malformed text -- but not what it
-    raises for a document that is merely too deep."""
+    """Ward's promise is that it fails closed on EVERY envelope it cannot inspect.
 
-    def test_deeply_nested_json_still_denies(self):
-        raw = b"[" * 2000 + b"0" + b"]" * 2000
-        code, body = _run(raw, self.state)
+    `main` caught only `ValueError`. That is what `json.loads` raises for the malformed text the
+    arm was written for -- but a deeply nested document raises `RecursionError`, and `wire.scrub`
+    walks the parsed value recursively and raises the same on the same input. Neither is a
+    `ValueError`, so both crashed out of `main()` and the hook exited 1 having written NOTHING to
+    stdout. A hook that emits no decision is a hook that allowed the call.
+
+    The exception TYPE is deliberately not asserted from the nested-JSON case: how deep a document
+    CPython will parse before it gives up is a property of the interpreter, not of Ward. Measured
+    3.11 raising `RecursionError` at depth 2000 where 3.12 parsed the same input and reported the
+    ordinary not-an-object refusal instead. Pinning the type there pins the wrong thing and goes
+    red on a version bump; the injection test below pins the actual contract with no dependence on
+    any of that.
+    """
+
+    def _deep_object(self):
+        # An OBJECT, not an array: an array is refused by the not-a-JSON-object guard before
+        # anything recursive runs, so it never exercised the path this class is about. Depth is
+        # taken from the live limit so the input stays deep on an interpreter with a larger one.
+        depth = sys.getrecursionlimit() * 20
+        return (b'{"tool_input":' + b'{"a":' * depth + b'1' + b'}' * depth + b'}')
+
+    def test_a_document_too_deep_to_inspect_still_denies(self):
+        code, body = _run(self._deep_object(), self.state)
         self.assertEqual(code, 0, "a crash exit means the hook emitted no decision at all")
         self.assertIn("failing closed", _reason(body),
-                      "an envelope Ward could not parse must never be allowed through")
+                      "an envelope Ward could not inspect must never be allowed through")
 
-    def test_the_fault_row_names_the_exception_type(self):
-        _run(b"[" * 2000 + b"0" + b"]" * 2000, self.state)
+    def test_a_non_valueerror_from_the_read_still_denies_and_is_recorded(self):
+        """The contract itself, injected rather than provoked: whatever `read_event` raises, Ward
+        denies, exits 0, and files a fault naming the type."""
+        import contextlib
+        import io
+
+        from ward import dispatch, journal, wire
+
+        original_read, original_state = wire.read_stdin, journal.state_dir
+        wire.read_stdin = lambda: (_ for _ in ()).throw(RecursionError("too deep"))
+        journal.state_dir = lambda: self.state
+        self.addCleanup(setattr, wire, "read_stdin", original_read)
+        self.addCleanup(setattr, journal, "state_dir", original_state)
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            code = dispatch.main()
+
+        self.assertEqual(code, 0)
+        self.assertIn("failing closed", _reason(json.loads(out.getvalue() or "{}")))
         faults = [r for r in _rows(self.state) if r["kind"] == "fault"]
         self.assertEqual(len(faults), 1)
-        self.assertIn("RecursionError", faults[0]["detail"])
+        self.assertIn("RecursionError", faults[0]["detail"],
+                      "the fault row must name what went wrong, not merely that something did")
         self.assertIs(faults[0]["failed_closed"], True)
 
 
