@@ -176,12 +176,23 @@ class TestTheRecord(StateCase):
         from ward import journal
         from ward.dispatch import route
 
+        # Pin the journal at this test's OWN directory. `route` reaches the journal through
+        # `note_session`, which returns early once this session's marker exists -- so against the
+        # ambient state dir a re-run short-circuits before `_append` and the broken writer below is
+        # never actually called. The test would still pass, having exercised nothing. Found by
+        # planting a non-swallowing `note_session` in Gyroscope's twin of this test and watching it
+        # stay green for exactly that reason.
+        original_state = journal.state_dir
+        journal.state_dir = lambda: self.state
+        self.addCleanup(setattr, journal, "state_dir", original_state)
+
         original = journal._append
         journal._append = lambda *a, **k: (_ for _ in ()).throw(OSError("disk full"))
         self.addCleanup(setattr, journal, "_append", original)
 
         event = json.loads(BENIGN_PY_WITH_BAD_BYTE.decode("utf-8", "replace"))
-        self.assertEqual(route(event), {})
+        self.assertEqual(route(event), {},
+                         "a journal that cannot write changed the decision on the wire")
 
 
 # --- unit guarantees of the boundary ---------------------------------------------------------
