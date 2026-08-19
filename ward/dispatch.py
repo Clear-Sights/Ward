@@ -24,6 +24,7 @@ failure direction exactly where it was and makes the reason true.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from typing import Any
 
@@ -79,7 +80,43 @@ def route(event: dict[str, Any]) -> dict[str, Any]:
     return deny(f"{check_id}: {message}")
 
 
+
+def _mute_unwritable_stderr() -> None:
+    """Flush stderr while its failure can still be caught, and retire it if it is broken.
+
+    CPython flushes `sys.stderr` during shutdown, AFTER this hook has returned, and a flush that
+    fails there can set the process exit status regardless of what the hook decided. The host then
+    reads a crashed hook rather than a decision -- an unwritable stderr downgrading a fail-closed
+    refusal into no answer at all, which is the unguarded-`print` defect below one layer further
+    out: reporting must never outrank deciding.
+
+    HONEST LIMIT, stated because the alternative is a comment that overclaims: CI reported exit 120
+    on 3.12/3.13/3.14 for the deep-input case, and that exact status could NOT be reproduced here
+    on 3.11, 3.12 or 3.13 -- the same invocation exits 0 locally with or without this function. So
+    this is a mitigation for a mechanism whose trigger is not fully pinned down, not a fix proven
+    against a reproduction. What IS verified on all three interpreters is the property the test
+    now asserts: the deny reaches stdout. The exit status under a deliberately unwritable stderr is
+    CPython shutdown behaviour and is not Ward's to guarantee.
+    """
+    try:
+        sys.stderr.flush()
+    except Exception:
+        try:
+            sys.stderr = open(os.devnull, "w")
+        except Exception:
+            pass
+
+
 def main() -> int:
+    # try/finally rather than a call before each return: every one of `_run`'s exits is a decision
+    # already written to stdout, and a shutdown flush must not be able to overwrite any of them.
+    try:
+        return _run()
+    finally:
+        _mute_unwritable_stderr()
+
+
+def _run() -> int:
     try:
         event, repaired, escaped = read_event()
     except Exception as e:
