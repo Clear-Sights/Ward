@@ -94,6 +94,32 @@ ambiguous detached security keyword. Malformed input or a shim that cannot start
 fail-closed denial, as does an internal dispatcher error while a `PreToolUse` check is due to run.
 These are wiring/input failures, not extra rows in the `CHECKS` table.
 
+Before any of that, `ward/wire.py` reads stdin as **bytes** and repairs anything that is not valid
+UTF-8. A hook subprocess inherits no `LANG`, so Python's stdin decoder used to smuggle each bad
+byte in as a lone surrogate; `ast.parse` then refused it, and `ward.cannot_evaluate` denied a
+perfectly valid Python file with a reason — "introduced Python fragment cannot be parsed
+independently" — that was false. Failing closed licenses refusing. It does not license explaining
+the refusal wrongly: an agent cannot act on a reason that is not true, so it rewrites code that was
+never the problem while the byte survives every rewrite. Repairs are counted and recorded, never
+silent.
+
+## What Ward writes down
+
+`ward/journal.py` appends to `decisions.jsonl` under `$WARD_STATE_DIR` (default
+`~/.claude/ward_state`): one `session` row the first time a session is seen — carrying the loaded
+check count, so the log proves Ward *ran* separately from whether it *caught* anything — plus one
+row per `deny`, per `fault`, and per repaired envelope. There is deliberately no row per allowed
+call.
+
+Every row names `plugin`, `session_id` and `tool_name`, and every deny reason on the wire is
+prefixed `ward.<check_id>`. Ward is not the only plugin registering `PreToolUse` `*`, and the host
+shows the user a reason but never a source.
+
+`fault` rows carry `failed_closed`, which makes the bench-wide fail-direction policy checkable
+against the record rather than against prose. Ward's answer is always `true`; see
+[Courthouse docs/FAIL-DIRECTION.md](https://github.com/Clear-Sights/Courthouse/blob/main/docs/FAIL-DIRECTION.md)
+for why the axis a plugin judges — not its taste — decides its direction.
+
 ## Allow an intentional match
 
 The seven introduced-Python rows accept a narrow, auditable escape hatch: put a tokenized Python
