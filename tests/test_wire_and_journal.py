@@ -259,6 +259,26 @@ class TestFailClosedIsTotal(StateCase):
         self.assertIn("failing closed", _reason(body),
                       "an envelope Ward could not inspect must never be allowed through")
 
+    def test_an_unwritable_stderr_cannot_defeat_the_deny(self):
+        """Reporting must never outrank deciding.
+
+        The fail-closed handler wrote its diagnostic to stderr BEFORE emitting the deny. With
+        stderr unwritable -- a closed fd, a full disk, `2>/dev/full` -- that print raised, the deny
+        underneath it never ran, and the hook exited 1 having written nothing. An observability
+        failure produced a fail-OPEN, in the plugin whose whole premise is that it never fails
+        open. Measured before the guard: exit 1, zero bytes of stdout.
+        """
+        raw = b'{"tool_input":' + b'{"a":' * 20000 + b'1' + b'}' * 20000 + b'}'
+        env = os.environ.copy()
+        env["WARD_STATE_DIR"] = str(self.state)
+        with open("/dev/full", "w") as full:
+            proc = subprocess.run([sys.executable, "-m", "ward.dispatch"], input=raw,
+                                  stdout=subprocess.PIPE, stderr=full,
+                                  env=env, cwd=str(REPO_ROOT))
+        self.assertEqual(proc.returncode, 0, "a crash exit means no decision reached the host")
+        body = json.loads(proc.stdout.decode() or "{}")
+        self.assertIn("failing closed", _reason(body))
+
     def test_a_non_valueerror_from_the_read_still_denies_and_is_recorded(self):
         """The contract itself, injected rather than provoked: whatever `read_event` raises, Ward
         denies, exits 0, and files a fault naming the type."""
@@ -334,21 +354,27 @@ class TestTheSessionRowIsExactlyOnce(StateCase):
             session = f"race-{round_no}"
             read_fd, write_fd = os.pipe()
             kids = []
-            for _ in range(16):
-                pid = os.fork()
-                if pid == 0:
-                    try:
-                        os.close(write_fd)
-                        os.read(read_fd, 1)   # released when the parent closes its end
-                        journal.note_session({"session_id": session, "tool_name": "T"},
-                                             root=self.state)
-                    finally:
-                        os._exit(0)
-                kids.append(pid)
-            os.close(write_fd)
-            for pid in kids:
-                os.waitpid(pid, 0)
-            os.close(read_fd)
+            try:
+                for _ in range(16):
+                    pid = os.fork()
+                    if pid == 0:
+                        try:
+                            os.close(write_fd)
+                            os.read(read_fd, 1)   # released when the parent closes its end
+                            journal.note_session({"session_id": session, "tool_name": "T"},
+                                                 root=self.state)
+                        finally:
+                            os._exit(0)
+                    kids.append(pid)
+            finally:
+                # Release and reap in `finally`, so a fork() that fails part-way through the burst
+                # -- process-table exhaustion on a loaded machine -- cannot leave the children it
+                # DID create blocked on the pipe forever, nor leak their fds into the rest of the
+                # run. Found by an independent review pass.
+                os.close(write_fd)
+                for pid in kids:
+                    os.waitpid(pid, 0)
+                os.close(read_fd)
             rows = [r for r in _rows(self.state)
                     if r["kind"] == "session" and r["session_id"] == session]
             self.assertEqual(len(rows), 1,

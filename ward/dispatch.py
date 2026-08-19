@@ -94,7 +94,16 @@ def main() -> int:
         # whose entire premise is that it never does that. Anything read_event can raise is an
         # envelope Ward could not inspect, and every one of them takes the same closed exit.
         journal.note_fault({}, "unreadable_event", f"{type(e).__name__}: {e}", failed_closed=True)
-        print(f"ward.dispatch: {type(e).__name__}: {e}", file=sys.stderr)
+        # GUARDED, and it has to be: this print sat between the fault and the deny, unprotected.
+        # An unwritable stderr -- a closed fd, a full disk, `2>/dev/full` -- raised here, the deny
+        # below never ran, and the hook exited 1 with an empty stdout. That is fail-OPEN produced
+        # by an OBSERVABILITY failure, in the one plugin whose whole premise is that it never
+        # fails open, and it is the same defect this handler was written to close, one line lower
+        # down. Reporting must never outrank deciding.
+        try:
+            print(f"ward.dispatch: {type(e).__name__}: {e}", file=sys.stderr)
+        except Exception:
+            pass
         emit(deny(
             "ward: malformed hook input; failing closed because the pending action could not be "
             "inspected (see dispatch stderr)."
@@ -104,7 +113,7 @@ def main() -> int:
         # Recorded, and NOT a fault: the event was evaluated, on a repaired payload. Conflating the
         # two would inflate the count of unevaluated calls, which is the number this log exists to
         # keep honest.
-        journal.note_repair(event, repaired, escaped)
+        journal.note_repair(event, repaired, escaped=escaped)
     try:
         result = route(event)
     except Exception as e:
@@ -113,7 +122,12 @@ def main() -> int:
         # silently vanishes when its own machinery errors was never a gate, matching Detent's own
         # outbound-gate failure-direction precedent.
         journal.note_fault(event, "check_raised", f"{type(e).__name__}: {e}", failed_closed=True)
-        print(f"ward.dispatch: check raised {e!r}", file=sys.stderr)
+        # Guarded for the same reason as the handler above: an unwritable stderr must not be able
+        # to stop the deny underneath it from reaching the wire.
+        try:
+            print(f"ward.dispatch: check raised {e!r}", file=sys.stderr)
+        except Exception:
+            pass
         if event.get("hook_event_name") == "PreToolUse":
             emit(deny(
                 "ward: internal error while a safety check was due to run; failing closed "
