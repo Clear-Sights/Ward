@@ -30,7 +30,9 @@ import time
 import unittest
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).parent.parent
+# The directory holding the `ward` package, which is what `python -m ward.dispatch` needs as
+# its cwd -- the package moved under plugin/ when the installed subtree stopped carrying tests.
+PLUGIN_ROOT = Path(__file__).resolve().parent.parent / "plugin"
 
 BENIGN_PY_WITH_BAD_BYTE = (
     b'{"hook_event_name":"PreToolUse","tool_name":"Write","session_id":"w-benign",'
@@ -47,7 +49,7 @@ def _run(raw: bytes, state_dir) -> tuple:
     env = os.environ.copy()
     env["WARD_STATE_DIR"] = str(state_dir)
     proc = subprocess.run([sys.executable, "-m", "ward.dispatch"], input=raw,
-                          capture_output=True, env=env, cwd=str(REPO_ROOT))
+                          capture_output=True, env=env, cwd=str(PLUGIN_ROOT))
     return proc.returncode, json.loads(proc.stdout.decode() or "{}")
 
 
@@ -274,7 +276,7 @@ class TestFailClosedIsTotal(StateCase):
         with open("/dev/full", "w") as full:
             proc = subprocess.run([sys.executable, "-m", "ward.dispatch"], input=raw,
                                   stdout=subprocess.PIPE, stderr=full,
-                                  env=env, cwd=str(REPO_ROOT))
+                                  env=env, cwd=str(PLUGIN_ROOT))
         # The DENY is what is asserted, not the exit status. Ward owns what it writes to stdout;
         # it does not own what CPython does when it flushes a deliberately unwritable stderr during
         # interpreter shutdown, which is after this hook has returned. CI reported 120 there on
