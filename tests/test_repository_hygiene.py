@@ -11,6 +11,30 @@ REPO = Path(__file__).resolve().parent.parent
 PLUGIN = REPO / "plugin"
 
 
+class ImportProvenance(unittest.TestCase):
+    """Whether a green run is evidence about THIS tree."""
+
+    def test_the_package_under_test_came_from_this_checkout(self):
+        """A bare `python3 -m unittest discover -s tests` here imported `ward` from a DIFFERENT
+        repository: a stale `__editable__.ward-0.1.0.pth` in dist-packages resolves the name to
+        another tree, so the suite graded code this branch does not contain and still reported OK.
+
+        Measured, not supposed: neutering `forbidden_location` to `return None` in THIS tree left
+        the run at `Ran 113 tests OK`, because the bytes under test came from elsewhere. The same
+        plant against the tree actually imported turned it red with 8 failures. Nothing recorded
+        which tree was read, so the wrong answer was shaped exactly like the right one.
+
+        CI installs this checkout (`pip install -e .`) and satisfies this. A local run that does
+        not now fails by name instead of silently grading another repository's code."""
+        import ward
+        origin = Path(ward.__file__).resolve()
+        self.assertTrue(
+            origin.is_relative_to(PLUGIN),
+            f"tests import ward from {origin}, which is outside {PLUGIN}: this run grades a "
+            f"different tree. Re-run with PYTHONPATH={PLUGIN}, or remove the stale editable install",
+        )
+
+
 class RepositoryHygiene(unittest.TestCase):
     def test_path_resolution_report_is_not_shipped(self):
         report = REPO / "out-ward-pathresolve.md"
