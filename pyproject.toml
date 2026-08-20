@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ward"
-version = "0.1.0"
+version = "1.1.0"
 description = "11 exact, no-substitute PreToolUse hard denies for actions dangerous regardless of intent or honesty"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.11"
