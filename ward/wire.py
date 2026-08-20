@@ -121,17 +121,16 @@ def _decode_counting(data: bytes) -> tuple[str, int]:
     try:
         return scrub_text(data.decode("utf-8"))
     except UnicodeDecodeError:
-        pass
-    # `surrogateescape`, then scrub -- NOT `errors="replace"`.
-    #
-    # `replace` emits ONE U+FFFD per malformed RUN, so a truncated three-byte sequence like
-    # b"\xe2\x82" (two undecodable bytes) reported 1, and the field is called "bytes repaired".
-    # An observability number whose name does not match its arithmetic is the kind of thing that
-    # gets trusted right up until someone reconciles two counts and cannot.
-    #
-    # `surrogateescape` maps each undecodable BYTE to exactly one lone surrogate, so counting the
-    # surrogates counts bytes -- which is what the field says. Scrubbing them immediately is what
-    # keeps the module's one guarantee: no surrogate leaves here. It also retires the
-    # `data.count(b"\xef\xbf\xbd")` correction entirely, since surrogateescape never touches a
-    # U+FFFD the host legitimately sent.
-    return scrub_text(data.decode("utf-8", errors="surrogateescape"))
+        # `surrogateescape`, then scrub -- NOT `errors="replace"`.
+        #
+        # `replace` emits ONE U+FFFD per malformed RUN, so a truncated three-byte sequence like
+        # b"\xe2\x82" (two undecodable bytes) reported 1, and the field is called "bytes repaired".
+        # An observability number whose name does not match its arithmetic is the kind of thing that
+        # gets trusted right up until someone reconciles two counts and cannot.
+        #
+        # `surrogateescape` maps each undecodable BYTE to exactly one lone surrogate, so counting the
+        # surrogates counts bytes -- which is what the field says. Scrubbing them immediately is what
+        # keeps the module's one guarantee: no surrogate leaves here. It also retires the
+        # `data.count(b"\xef\xbf\xbd")` correction entirely, since surrogateescape never touches a
+        # U+FFFD the host legitimately sent.
+        return scrub_text(data.decode("utf-8", errors="surrogateescape"))
