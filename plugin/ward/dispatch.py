@@ -65,6 +65,23 @@ def deny(reason: str) -> dict[str, Any]:
     }}
 
 
+def _warn(text: str) -> None:
+    """Write one diagnostic line to stderr, swallowing the failure if that write fails.
+
+    GUARDED, and it has to be: every caller is a fail-closed handler that reports between the fault
+    it recorded and the deny it is about to emit. Unguarded, this print sat there naked -- an
+    unwritable stderr (a closed fd, a full disk, `2>/dev/full`) raised here, the deny below never
+    ran, and the hook exited 1 with an empty stdout. That is fail-OPEN produced by an OBSERVABILITY
+    failure, in the one plugin whose whole premise is that it never fails open. Reporting must never
+    outrank deciding, and one helper is what stops the next handler re-opening the hole with a bare
+    `print`.
+    """
+    try:
+        print(text, file=sys.stderr)
+    except Exception:
+        pass
+
+
 def route(event: dict[str, Any]) -> dict[str, Any]:
     if event.get("hook_event_name") != "PreToolUse":
         return {}
@@ -78,7 +95,6 @@ def route(event: dict[str, Any]) -> dict[str, Any]:
     # reading the transcript name the author, and the row is what lets it be joined afterwards.
     journal.note_deny(event, check_id, message)
     return deny(f"{check_id}: {message}")
-
 
 
 def _mute_unwritable_stderr() -> None:
@@ -131,16 +147,10 @@ def _run() -> int:
         # whose entire premise is that it never does that. Anything read_event can raise is an
         # envelope Ward could not inspect, and every one of them takes the same closed exit.
         journal.note_fault({}, "unreadable_event", f"{type(e).__name__}: {e}", failed_closed=True)
-        # GUARDED, and it has to be: this print sat between the fault and the deny, unprotected.
-        # An unwritable stderr -- a closed fd, a full disk, `2>/dev/full` -- raised here, the deny
-        # below never ran, and the hook exited 1 with an empty stdout. That is fail-OPEN produced
-        # by an OBSERVABILITY failure, in the one plugin whose whole premise is that it never
-        # fails open, and it is the same defect this handler was written to close, one line lower
-        # down. Reporting must never outrank deciding.
-        try:
-            print(f"ward.dispatch: {type(e).__name__}: {e}", file=sys.stderr)
-        except Exception:
-            pass
+        # Via `_warn`, and it has to be: this print sat between the fault and the deny,
+        # unprotected, and an unwritable stderr raised here took the deny down with it -- the same
+        # defect this handler was written to close, one line lower down. See `_warn`.
+        _warn(f"ward.dispatch: {type(e).__name__}: {e}")
         emit(deny(
             "ward: malformed hook input; failing closed because the pending action could not be "
             "inspected (see dispatch stderr)."
@@ -160,11 +170,8 @@ def _run() -> int:
         # outbound-gate failure-direction precedent.
         journal.note_fault(event, "check_raised", f"{type(e).__name__}: {e}", failed_closed=True)
         # Guarded for the same reason as the handler above: an unwritable stderr must not be able
-        # to stop the deny underneath it from reaching the wire.
-        try:
-            print(f"ward.dispatch: check raised {e!r}", file=sys.stderr)
-        except Exception:
-            pass
+        # to stop the deny underneath it from reaching the wire. See `_warn`.
+        _warn(f"ward.dispatch: check raised {e!r}")
         if event.get("hook_event_name") == "PreToolUse":
             emit(deny(
                 "ward: internal error while a safety check was due to run; failing closed "

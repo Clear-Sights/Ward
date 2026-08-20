@@ -170,6 +170,16 @@ def _claim(marker: pathlib.Path) -> bool:
     return True
 
 
+def _check_count() -> int:
+    """How many checks were loaded. Absence must not read as green: a session row saying `0` is a
+    Ward that inspected nothing, and that is a different fact from a quiet session."""
+    try:
+        from ward.checks import CHECKS
+        return len(CHECKS)
+    except Exception:
+        return -1
+
+
 def note_session(event: dict, root: pathlib.Path | None = None) -> None:
     """Record ONCE per session that Ward was live. See the module docstring for why this exists.
 
@@ -261,13 +271,3 @@ def note_repair(event: dict, repaired: int, *, escaped: int = 0,
         _append(_row(event, "repair", repaired=int(repaired), escaped=int(escaped)), root=root)
     except Exception:
         pass
-
-
-def _check_count() -> int:
-    """How many checks were loaded. Absence must not read as green: a session row saying `0` is a
-    Ward that inspected nothing, and that is a different fact from a quiet session."""
-    try:
-        from ward.checks import CHECKS
-        return len(CHECKS)
-    except Exception:
-        return -1

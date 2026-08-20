@@ -18,6 +18,7 @@ judgment wearing a shared shape's clothes, not a real generalization.
 from __future__ import annotations
 
 import ast
+import functools
 import io
 import json
 import os
@@ -41,6 +42,16 @@ _JWT_CALLEE_RX = re.compile(r"(?i)(?:^|\.)(?:jwt|jose|pyjwt)(?:\.|$)")
 _MUTATION_TEXT_SUFFIX_RX = re.compile(r"(?i)\.(?:py|toml|ya?ml|json|ini|cfg|conf|sh|bash|zsh)$")
 
 
+def _parse_candidates(dedented: str):
+    """The two mirrored spellings of already-dedented INTRODUCED text, as (source, line_offset)
+    pairs: the text itself, then the same text indented under an `if True:` header so a bare
+    indented fragment still parses and tokenizes. Yielded lazily, so the wrapped spelling costs
+    nothing when the first one works. Shared by `_parse_introduced` and `_allow_lines` so the line
+    coordinates both docstrings promise are mirrored come from ONE definition, not two copies."""
+    yield dedented, 0
+    yield "if True:\n" + "\n".join("    " + ln for ln in dedented.splitlines()), 1
+
+
 def _allow_lines(content: str) -> frozenset[int]:
     """Line numbers carrying a structured `ward-allow: <reason>` marker IN A COMMENT.
 
@@ -55,14 +66,22 @@ def _allow_lines(content: str) -> frozenset[int]:
 
     A bare `ward-allow` with no colon and reason still does not exempt.
 
+    Memoized (on the dedented text, in `_allow_lines_of`): pure, and the result is an immutable
+    frozenset, so the seven checks sharing `_ast_introduced_check` tokenize a given payload at most
+    once between them instead of once each.
+
     Coordinates match `_parse_introduced`'s: the two parse attempts are mirrored so the returned
     line numbers are directly comparable to `node.lineno - off`. If neither tokenizes, NOTHING is
     exempt -- a check fires rather than being silently disarmed, which is the only safe direction
     for a hard deny.
     """
-    dedented = textwrap.dedent(content)
-    wrapped = "if True:\n" + "\n".join("    " + ln for ln in dedented.splitlines())
-    for source, off in ((dedented, 0), (wrapped, 1)):
+    return _allow_lines_of(textwrap.dedent(content))
+
+
+@functools.lru_cache(maxsize=16)
+def _allow_lines_of(dedented: str) -> frozenset[int]:
+    """The tokenize pass behind `_allow_lines`, memoized on the dedented text it is given."""
+    for source, off in _parse_candidates(dedented):
         try:
             return frozenset(
                 tok.start[0] - off
@@ -105,16 +124,27 @@ def _parse_introduced(content: str):
     comment/string/docstring MENTION."""
     if not content or not content.strip():
         return None, 0
-    dedented = textwrap.dedent(content)
-    try:
-        return ast.parse(dedented), 0
-    except (SyntaxError, ValueError):
-        pass
-    try:
-        body = "\n".join("    " + ln for ln in dedented.splitlines())
-        return ast.parse("if True:\n" + body), 1
-    except (SyntaxError, ValueError):
-        return None, 0
+    return _parse_dedented(textwrap.dedent(content))
+
+
+@functools.lru_cache(maxsize=16)
+def _parse_dedented(dedented: str):
+    """The parse itself, memoized. `evaluate` runs `_cannot_evaluate` and then the seven
+    `_ast_introduced_check` checks over the SAME introduced text, so one event parsed one payload
+    eight times -- measured 48 ms on an 862-line fragment of which 6 ms was the one parse that had
+    to happen. Every caller only READS the tree (`ast.walk`, `tree.body`) and nothing in this module
+    mutates a node, so one shared tree is the same tree.
+
+    Both memoized helpers key on the DEDENTED text and take it from their caller, so the operation
+    that rejects a non-str payload (`.strip()` here, `textwrap.dedent` in `_allow_lines`) still runs
+    first, in the same place, raising what it always raised. `textwrap.dedent` is idempotent, so
+    dedenting before the cache instead of inside `_parse_candidates` changes no result."""
+    for source, off in _parse_candidates(dedented):
+        try:
+            return ast.parse(source), off
+        except (SyntaxError, ValueError):
+            continue
+    return None, 0
 
 
 def is_false_const(node) -> bool:
@@ -200,7 +230,9 @@ def _ast_introduced_check(node_match: Callable[[ast.AST], Optional[str]]) -> Cal
                         # pass over the payload (measured 10.5 ms on an 853-line file), and SEVEN
                         # checks share this scaffold -- so computing it up front spent ~74 ms of a
                         # 156 ms event tokenizing the same text seven times, and in the common
-                        # no-match case not one of the seven results was ever read. `_allow_lines`
+                        # no-match case not one of the seven results was ever read. (`_allow_lines`
+                        # is memoized too, so the seven no longer repeat it either; the deferral is
+                        # what keeps the no-match case from paying for it at all.) `_allow_lines`
                         # is pure, so deferring it cannot change which lines come back exempt.
                         exempt = _allow_lines(content)
                     # `continue`, never `return None`: one annotated line is one exemption. Stopping
@@ -411,6 +443,9 @@ _CREDENTIAL_BASENAMES = frozenset({
 })
 _WRITE_NAMES = frozenset({"Write", "MultiEdit"})
 _EDIT_NAMES = frozenset({"Edit", "NotebookEdit"})
+# Every tool that names a path Ward must vet -- the union both path-facing gates below test, as one
+# name rather than a repeated two-clause membership test.
+_PATH_MUTATION_NAMES = _WRITE_NAMES | _EDIT_NAMES
 # The tools whose introduced TEXT `self_mute_guard` and `integrity_suppression_flag` scan. This
 # is deliberately NOT `_WRITE_NAMES | _EDIT_NAMES`: that union carries `NotebookEdit`, and these
 # two checks have never covered it. Named here so the two remain one decision rather than two
@@ -455,7 +490,7 @@ def _cannot_evaluate(event: dict[str, Any]) -> Optional[str]:
     if event.get("hook_event_name") != "PreToolUse":
         return None
     name = event.get("tool_name")
-    if name not in _WRITE_NAMES and name not in _EDIT_NAMES:
+    if name not in _PATH_MUTATION_NAMES:
         return None
     ti = event.get("tool_input")
     if not isinstance(ti, dict):
@@ -544,20 +579,16 @@ def _resolves_outside_cwd(file_path: str, cwd: str) -> Optional[bool]:
     # C: path, so refuse it rather than treating the colon as an ordinary in-cwd filename.
     if _WINDOWS_DRIVE_RELATIVE_RX.match(file_path):
         return True
+    if not cwd:
+        return None
+    root = _lexical_resolve(cwd)
     fp = _lexical_resolve(file_path)
-    if not fp.is_absolute():
-        if not cwd:
-            return None
-        base = _lexical_resolve(cwd)
-        if not base.is_absolute():
-            return None
-        target = _lexical_resolve(str(base / fp))
-        root = base
-    else:
+    if fp.is_absolute():
         target = fp
-        if not cwd:
+    else:
+        if not root.is_absolute():
             return None
-        root = _lexical_resolve(cwd)
+        target = _lexical_resolve(str(root / fp))
     if str(target) == str(root):
         return False
     root_parts, target_parts = root.parts, target.parts
@@ -632,9 +663,9 @@ def forbidden_location(event: dict) -> Optional[str]:
     if event.get("hook_event_name") != "PreToolUse":
         return None
     name = event.get("tool_name", "")
-    if name not in _WRITE_NAMES and name not in _EDIT_NAMES:
+    if name not in _PATH_MUTATION_NAMES:
         return None
-    ti = event.get("tool_input") or {}
+    ti = event.get("tool_input")
     if not isinstance(ti, dict):
         return None
     file_path = _location_arg(ti)
@@ -681,6 +712,26 @@ def outbound_secret_pattern(event: dict) -> Optional[str]:
     return None
 
 
+def _text_mutation_input(event: dict) -> Optional[dict]:
+    """The `tool_input` of a PreToolUse text-file mutation whose path Ward scans, else None.
+
+    This is the entire "rest" of `self_mute_guard` and `integrity_suppression_flag`: same event
+    kind, same tool set, same path-suffix set. It is one definition for the same reason
+    `_TEXT_MUTATION_NAMES` and `_MUTATION_TEXT_SUFFIX_RX` are each one constant -- the pair must
+    widen together, and a gate copied twice is the second place a widening gets forgotten. Callers
+    test `is None`, never truthiness: the returned dict is the caller's own input."""
+    if (event.get("hook_event_name") != "PreToolUse"
+            or event.get("tool_name") not in _TEXT_MUTATION_NAMES):
+        return None
+    ti = event.get("tool_input")
+    if not isinstance(ti, dict):
+        return None
+    path = ti.get("file_path", "")
+    if not isinstance(path, str) or not _MUTATION_TEXT_SUFFIX_RX.search(path):
+        return None
+    return ti
+
+
 # --- ward.self_mute_guard -----------------------------------------------------------------------
 # Ported by shape from Makoto's makoto/checks/selfMuteGuard.py.  Makoto protects its particular
 # settings hook; Ward translates the same removed-vs-introduced predicate to the pending source
@@ -707,14 +758,8 @@ def _removed_contents(tool_input: dict) -> tuple[str, ...]:
 
 def self_mute_guard(event: dict) -> Optional[str]:
     """Deny a mutation that explicitly disables a verifier or removes its callable shape."""
-    if (event.get("hook_event_name") != "PreToolUse"
-            or event.get("tool_name") not in _TEXT_MUTATION_NAMES):
-        return None
-    ti = event.get("tool_input")
-    if not isinstance(ti, dict):
-        return None
-    path = ti.get("file_path", "")
-    if not isinstance(path, str) or not _MUTATION_TEXT_SUFFIX_RX.search(path):
+    ti = _text_mutation_input(event)
+    if ti is None:
         return None
     introduced_parts = scan_target_contents(ti)
     introduced = "\n".join(introduced_parts)
@@ -754,14 +799,8 @@ _INTEGRITY_ENV_RX = re.compile(
 
 def integrity_suppression_flag(event: dict) -> Optional[str]:
     """Deny introducing an integrity-named suppression flag or environment-variable gate."""
-    if (event.get("hook_event_name") != "PreToolUse"
-            or event.get("tool_name") not in _TEXT_MUTATION_NAMES):
-        return None
-    ti = event.get("tool_input")
-    if not isinstance(ti, dict):
-        return None
-    path = ti.get("file_path", "")
-    if not isinstance(path, str) or not _MUTATION_TEXT_SUFFIX_RX.search(path):
+    ti = _text_mutation_input(event)
+    if ti is None:
         return None
     for content in scan_target_contents(ti):
         flag = _INTEGRITY_FLAG_RX.search(content)
