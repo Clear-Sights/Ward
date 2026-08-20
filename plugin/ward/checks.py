@@ -33,7 +33,10 @@ from typing import Any, Callable, Optional
 # ================================================================================================
 
 _WARD_ALLOW_RX = re.compile(r"ward-allow\s*:\s*\S", re.IGNORECASE)
-_PY_FILE_RX = re.compile(r"\.py$")
+# (?i): case-insensitive, so `.PY`/`.Py` on a case-insensitive filesystem (macOS/Windows)
+# cannot slip past the AST hard denies or the `_cannot_evaluate` preflight -- the same
+# filesystem model `_MUTATION_TEXT_SUFFIX_RX` and `_lexical_resolve` already apply.
+_PY_FILE_RX = re.compile(r"(?i)\.py$")
 _JWT_CALLEE_RX = re.compile(r"(?i)(?:^|\.)(?:jwt|jose|pyjwt)(?:\.|$)")
 # The file classes whose introduced TEXT the mutation checks scan. Shared by
 # `self_mute_guard` and `integrity_suppression_flag`, which are a matched pair: a suffix added
@@ -662,8 +665,12 @@ def _location_reason(name: str, file_path: str, cwd: str) -> Optional[str]:
     return None
 
 
-def _location_arg(tool_input: dict) -> Optional[str]:
-    for key in _LOCATION_KEYS:
+def _location_arg(tool_input: dict, tool_name: str = "") -> Optional[str]:
+    # NotebookEdit writes `notebook_path`; vet THAT first, or an ignored decoy `file_path` key
+    # silences `forbidden_location` while the write lands at `notebook_path`. Mirrors the
+    # path-key choice `_cannot_evaluate` already makes for the same tool.
+    keys = ("notebook_path", "file_path") if tool_name == "NotebookEdit" else _LOCATION_KEYS
+    for key in keys:
         value = tool_input.get(key)
         if isinstance(value, str) and value:
             return value
@@ -683,7 +690,7 @@ def forbidden_location(event: dict) -> Optional[str]:
     ti = event.get("tool_input")
     if not isinstance(ti, dict):
         return None
-    file_path = _location_arg(ti)
+    file_path = _location_arg(ti, name)
     if file_path is None:
         return None
     cwd = event.get("cwd", "")
