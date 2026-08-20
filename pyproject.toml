@@ -14,7 +14,13 @@ dependencies = []
 license-files = ["LICENSE", "NOTICE"]
 
 [tool.setuptools.packages.find]
+# The package lives under plugin/ -- that directory IS the installed plugin, and nothing
+# outside it ships. See .claude-plugin/marketplace.json.
+where = ["plugin"]
 include = ["ward*"]
 
-["tests"]
-pythonpath = ["."]
+[tool.pytest.ini_options]
+# The suite runs under `python -m unittest discover -s tests`, which picks up the
+# package from `pip install -e .` (see .github/workflows/). This table only helps a
+# contributor who reaches for pytest against an uninstalled checkout.
+pythonpath = ["plugin"]

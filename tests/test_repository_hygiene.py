@@ -7,6 +7,8 @@ import unittest
 
 
 REPO = Path(__file__).resolve().parent.parent
+# What a user actually installs. Everything outside it -- tests, eval, tools -- stays here.
+PLUGIN = REPO / "plugin"
 
 
 class RepositoryHygiene(unittest.TestCase):
@@ -21,12 +23,10 @@ class RepositoryHygiene(unittest.TestCase):
         """render_readme_images.py works in a mkdtemp under docs/img; a committed one ships a
         whole headless-Chromium profile (History, Web Data, Login Data databases) as repository
         content. Three such directories were found tracked and removed; this pins the removal."""
-        import subprocess
-        tracked = subprocess.run(
-            ["git", "-C", str(REPO), "ls-files", "docs/img"],
-            capture_output=True, text=True, check=True,
-        ).stdout.splitlines()
-        strays = [line for line in tracked if ".ward-readme-images-" in line]
+        from tools.render_readme_images import IMAGE_DIR
+        self.assertTrue(IMAGE_DIR.is_dir(), f"the renderer image directory is missing: {IMAGE_DIR}")
+        strays = [str(path.relative_to(REPO)) for path in IMAGE_DIR.rglob("*")
+                  if ".ward-readme-images-" in path.name]
         self.assertEqual(strays, [], "render scratch directories are tracked: remove them")
 
     def test_security_guide_uses_the_supported_stdlib_test_command(self):
@@ -40,7 +40,7 @@ class ManifestsAgreeWithTheTree(unittest.TestCase):
     """Keep hook, package, and marketplace declarations synchronized with the shipped tree."""
 
     def test_every_hook_command_resolves_to_an_executable_file(self) -> None:
-        manifest = json.loads((REPO / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        manifest = json.loads((PLUGIN / "hooks" / "hooks.json").read_text(encoding="utf-8"))
         commands = [
             entry["command"]
             for group in manifest["hooks"].values()
@@ -50,12 +50,12 @@ class ManifestsAgreeWithTheTree(unittest.TestCase):
         ]
         self.assertTrue(commands, "hooks.json declares no commands -- the hook is wired to nothing")
         for command in commands:
-            target = REPO / command.replace("${CLAUDE_PLUGIN_ROOT}/", "")
+            target = PLUGIN / command.replace("${CLAUDE_PLUGIN_ROOT}/", "")
             self.assertTrue(target.is_file(), f"hooks.json names {command!r}, not in the tree")
             self.assertTrue(os.access(target, os.X_OK), f"{command!r} is not executable")
 
     def test_the_two_version_declarations_agree(self) -> None:
-        plugin = json.loads((REPO / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        plugin = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
         declared = re.search(r'^version\s*=\s*"([^"]+)"',
                              (REPO / "pyproject.toml").read_text(encoding="utf-8"), re.MULTILINE)
         self.assertIsNotNone(declared, "pyproject.toml declares no version")
@@ -69,10 +69,16 @@ class ManifestsAgreeWithTheTree(unittest.TestCase):
         """A marketplace listing pointing at a plugin name that does not exist installs nothing."""
         marketplace = json.loads(
             (REPO / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
-        plugin = json.loads((REPO / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        plugin = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
         entries = [entry for entry in marketplace.get("plugins", [])
                    if entry.get("name") == plugin["name"]]
         self.assertEqual(len(entries), 1,
                          f"marketplace.json must list plugin {plugin['name']!r} exactly once")
-        self.assertEqual(entries[0].get("source"), "./",
-                         f"marketplace entry for {plugin['name']!r} must source this tree")
+        # `./plugin`, not `./`. The source is the subtree a user receives, and sourcing the
+        # repository root shipped `tests/`, `eval/` and `tools/` to every installing machine.
+        # Asserted against the directory that must actually hold the manifest, so a source that
+        # drifts back to the root cannot pass by naming a plugin.json that is no longer there.
+        self.assertEqual(entries[0].get("source"), "./plugin",
+                         f"marketplace entry for {plugin['name']!r} must source the plugin subtree")
+        self.assertTrue((REPO / "plugin" / ".claude-plugin" / "plugin.json").is_file(),
+                        "the sourced subtree must be the one carrying plugin.json")

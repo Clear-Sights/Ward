@@ -32,15 +32,15 @@ $ claude plugin install ward@ward --scope user
 ```
 
 The marketplace entry in [.claude-plugin/marketplace.json](.claude-plugin/marketplace.json) exposes
-the plugin metadata in [.claude-plugin/plugin.json](.claude-plugin/plugin.json). Enabling it loads
-[hooks/hooks.json](hooks/hooks.json), which sends every `PreToolUse` event through the single
-[hooks/dispatch.sh](hooks/dispatch.sh) entrypoint. The shim pins execution to the plugin root and
+the plugin metadata in [plugin/.claude-plugin/plugin.json](plugin/.claude-plugin/plugin.json). Enabling it loads
+[plugin/hooks/hooks.json](plugin/hooks/hooks.json), which sends every `PreToolUse` event through the single
+[plugin/hooks/dispatch.sh](plugin/hooks/dispatch.sh) entrypoint. The shim pins execution to the plugin root and
 runs `python3 -m ward.dispatch`; there is no separate package-install step for the hook.
 
 To exercise that same bridge without modifying a file:
 
 ```console
-$ printf '%s' '{"hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":"/etc/ward-smoke","content":"x"},"cwd":"/tmp"}' | CLAUDE_PLUGIN_ROOT="$PWD" hooks/dispatch.sh
+$ printf '%s' '{"hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":"/etc/ward-smoke","content":"x"},"cwd":"/tmp"}' | CLAUDE_PLUGIN_ROOT="$PWD/plugin" plugin/hooks/dispatch.sh
 ```
 
 The response contains `permissionDecision: "deny"`. The shell exits normally with status 0: a
@@ -48,7 +48,7 @@ denial is a hook decision for the host to consume, not a process fault.
 
 ## What Ward denies
 
-The ordered `CHECKS` table in [ward/checks.py](ward/checks.py) contains these 11 rows. The first
+The ordered `CHECKS` table in [plugin/ward/checks.py](plugin/ward/checks.py) contains these 11 rows. The first
 matching row wins.
 
 | Row | Denies |
@@ -80,7 +80,7 @@ introduced-Python rows.
   <img src="docs/img/dispatch-flow-light.png" alt="Pending tool call through Ward's single entrypoint and 11-row denial table">
 </picture>
 
-[ward/dispatch.py](ward/dispatch.py) reads one JSON event. For a `PreToolUse` event, it applies the
+[plugin/ward/dispatch.py](plugin/ward/dispatch.py) reads one JSON event. For a `PreToolUse` event, it applies the
 mutation-input preflight where relevant, then evaluates the rows in order and emits one of two
 protocol shapes:
 
@@ -94,7 +94,7 @@ ambiguous detached security keyword. Malformed input or a shim that cannot start
 fail-closed denial, as does an internal dispatcher error while a `PreToolUse` check is due to run.
 These are wiring/input failures, not extra rows in the `CHECKS` table.
 
-Before any of that, `ward/wire.py` reads stdin as **bytes** and repairs anything that is not valid
+Before any of that, `plugin/ward/wire.py` reads stdin as **bytes** and repairs anything that is not valid
 UTF-8. A hook subprocess inherits no `LANG`, so Python's stdin decoder used to smuggle each bad
 byte in as a lone surrogate; `ast.parse` then refused it, and `ward.cannot_evaluate` denied a
 perfectly valid Python file with a reason — "introduced Python fragment cannot be parsed
@@ -105,7 +105,7 @@ silent.
 
 ## What Ward writes down
 
-`ward/journal.py` appends to `decisions.jsonl` under `$WARD_STATE_DIR` (default
+`plugin/ward/journal.py` appends to `decisions.jsonl` under `$WARD_STATE_DIR` (default
 `~/.claude/ward_state`): one `session` row the first time a session is seen — carrying the loaded
 check count, so the log proves Ward *ran* separately from whether it *caught* anything — plus one
 row per `deny`, per `fault`, and per repaired envelope. There is deliberately no row per allowed
@@ -139,7 +139,7 @@ suppression, and cannot-evaluate denials do not honor this annotation.
 ## Defeats we measured and closed
 
 Two measured defeats of the `ward-allow` mechanism itself, both fixed in
-[ward/checks.py](ward/checks.py)'s `_allow_lines` and recorded in its docstring; they are repeated
+[plugin/ward/checks.py](plugin/ward/checks.py)'s `_allow_lines` and recorded in its docstring; they are repeated
 here because a defeat that lives only in a module docstring persuades nobody who reads the README.
 
 - **A string literal disarmed every other line.** The marker was once regex-scanned over the raw

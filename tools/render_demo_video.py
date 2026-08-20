@@ -13,8 +13,11 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+PLUGIN = ROOT / "plugin"
+if str(PLUGIN) not in sys.path:
+    # The package moved under plugin/; the event payloads below still describe ROOT, because
+    # they stand for a user's working tree rather than for this repository's layout.
+    sys.path.insert(0, str(PLUGIN))
 
 from ward.checks import CHECKS, evaluate  # noqa: E402
 

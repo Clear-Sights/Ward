@@ -4,7 +4,7 @@
   "plugins": [
     {
       "name": "ward",
-      "source": "./",
+      "source": "./plugin",
       "description": "11 exact, no-substitute PreToolUse hard denies for actions dangerous regardless of intent or honesty.",
       "category": "workflow",
       "tags": ["security", "hooks", "safety"],

@@ -26,10 +26,13 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).parent.parent
+# The directory holding the `ward` package, which is what `python -m ward.dispatch` needs as
+# its cwd -- the package moved under plugin/ when the installed subtree stopped carrying tests.
+PLUGIN_ROOT = Path(__file__).resolve().parent.parent / "plugin"
 
 BENIGN_PY_WITH_BAD_BYTE = (
     b'{"hook_event_name":"PreToolUse","tool_name":"Write","session_id":"w-benign",'
@@ -46,7 +49,7 @@ def _run(raw: bytes, state_dir) -> tuple:
     env = os.environ.copy()
     env["WARD_STATE_DIR"] = str(state_dir)
     proc = subprocess.run([sys.executable, "-m", "ward.dispatch"], input=raw,
-                          capture_output=True, env=env, cwd=str(REPO_ROOT))
+                          capture_output=True, env=env, cwd=str(PLUGIN_ROOT))
     return proc.returncode, json.loads(proc.stdout.decode() or "{}")
 
 
@@ -83,6 +86,7 @@ class TestTheFalseDeny(StateCase):
         """Pin the false reason itself, not merely 'did not deny'. A future change that reintroduces
         the deny under any wording should fail here with the wording named."""
         _code, body = _run(BENIGN_PY_WITH_BAD_BYTE, self.state)
+        self.assertEqual(body, {}, "a silent or altered allow payload cannot satisfy a wording-only check")
         self.assertNotIn("cannot be parsed independently", _reason(body))
 
     def test_real_violation_with_a_bad_byte_still_denies(self):
@@ -176,12 +180,23 @@ class TestTheRecord(StateCase):
         from ward import journal
         from ward.dispatch import route
 
+        # Pin the journal at this test's OWN directory. `route` reaches the journal through
+        # `note_session`, which returns early once this session's marker exists -- so against the
+        # ambient state dir a re-run short-circuits before `_append` and the broken writer below is
+        # never actually called. The test would still pass, having exercised nothing. Found by
+        # planting a non-swallowing `note_session` in Gyroscope's twin of this test and watching it
+        # stay green for exactly that reason.
+        original_state = journal.state_dir
+        journal.state_dir = lambda: self.state
+        self.addCleanup(setattr, journal, "state_dir", original_state)
+
         original = journal._append
         journal._append = lambda *a, **k: (_ for _ in ()).throw(OSError("disk full"))
         self.addCleanup(setattr, journal, "_append", original)
 
         event = json.loads(BENIGN_PY_WITH_BAD_BYTE.decode("utf-8", "replace"))
-        self.assertEqual(route(event), {})
+        self.assertEqual(route(event), {},
+                         "a journal that cannot write changed the decision on the wire")
 
 
 # --- unit guarantees of the boundary ---------------------------------------------------------
@@ -213,6 +228,186 @@ class TestBoundaryUnits(unittest.TestCase):
         value, n = wire.scrub(original)
         self.assertEqual(n, 0)
         self.assertIs(value, original)
+
+
+# --- regressions found by an independent high-effort review pass ------------------------------
+
+class TestFailClosedIsTotal(StateCase):
+    """Ward's promise is that it fails closed on EVERY envelope it cannot inspect.
+
+    `main` caught only `ValueError`. That is what `json.loads` raises for the malformed text the
+    arm was written for -- but a deeply nested document raises `RecursionError`, and `wire.scrub`
+    walks the parsed value recursively and raises the same on the same input. Neither is a
+    `ValueError`, so both crashed out of `main()` and the hook exited 1 having written NOTHING to
+    stdout. A hook that emits no decision is a hook that allowed the call.
+
+    The exception TYPE is deliberately not asserted from the nested-JSON case: how deep a document
+    CPython will parse before it gives up is a property of the interpreter, not of Ward. Measured
+    3.11 raising `RecursionError` at depth 2000 where 3.12 parsed the same input and reported the
+    ordinary not-an-object refusal instead. Pinning the type there pins the wrong thing and goes
+    red on a version bump; the injection test below pins the actual contract with no dependence on
+    any of that.
+    """
+
+    def _deep_object(self):
+        # An OBJECT, not an array: an array is refused by the not-a-JSON-object guard before
+        # anything recursive runs, so it never exercised the path this class is about. Depth is
+        # taken from the live limit so the input stays deep on an interpreter with a larger one.
+        depth = sys.getrecursionlimit() * 20
+        return (b'{"tool_input":' + b'{"a":' * depth + b'1' + b'}' * depth + b'}')
+
+    def test_a_document_too_deep_to_inspect_still_denies(self):
+        code, body = _run(self._deep_object(), self.state)
+        self.assertEqual(code, 0, "a crash exit means the hook emitted no decision at all")
+        self.assertIn("failing closed", _reason(body),
+                      "an envelope Ward could not inspect must never be allowed through")
+
+    def test_an_unwritable_stderr_cannot_defeat_the_deny(self):
+        """Reporting must never outrank deciding.
+
+        The fail-closed handler wrote its diagnostic to stderr BEFORE emitting the deny. With
+        stderr unwritable -- a closed fd, a full disk, `2>/dev/full` -- that print raised, the deny
+        underneath it never ran, and the hook exited 1 having written nothing. An observability
+        failure produced a fail-OPEN, in the plugin whose whole premise is that it never fails
+        open. Measured before the guard: exit 1, zero bytes of stdout.
+        """
+        raw = b'{"tool_input":' + b'{"a":' * 20000 + b'1' + b'}' * 20000 + b'}'
+        env = os.environ.copy()
+        env["WARD_STATE_DIR"] = str(self.state)
+        with open("/dev/full", "w") as full:
+            proc = subprocess.run([sys.executable, "-m", "ward.dispatch"], input=raw,
+                                  stdout=subprocess.PIPE, stderr=full,
+                                  env=env, cwd=str(PLUGIN_ROOT))
+        # The DENY is what is asserted, not the exit status. Ward owns what it writes to stdout;
+        # it does not own what CPython does when it flushes a deliberately unwritable stderr during
+        # interpreter shutdown, which is after this hook has returned. CI reported 120 there on
+        # 3.12/3.13/3.14 and that status does not reproduce on 3.11/3.12/3.13 here -- so asserting
+        # it would pin the interpreter's shutdown behaviour rather than this plugin's contract, and
+        # would go red on a version bump that changed neither. The contract is: a fragment of the
+        # decision must never be all the host gets.
+        body = json.loads(proc.stdout.decode() or "{}")
+        self.assertIn("failing closed", _reason(body),
+                      "an unwritable stderr must not stop the deny reaching stdout")
+
+    def test_a_non_valueerror_from_the_read_still_denies_and_is_recorded(self):
+        """The contract itself, injected rather than provoked: whatever `read_event` raises, Ward
+        denies, exits 0, and files a fault naming the type."""
+        import contextlib
+        import io
+
+        from ward import dispatch, journal, wire
+
+        original_read, original_state = wire.read_stdin, journal.state_dir
+        wire.read_stdin = lambda: (_ for _ in ()).throw(RecursionError("too deep"))
+        journal.state_dir = lambda: self.state
+        self.addCleanup(setattr, wire, "read_stdin", original_read)
+        self.addCleanup(setattr, journal, "state_dir", original_state)
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            code = dispatch.main()
+
+        self.assertEqual(code, 0)
+        self.assertIn("failing closed", _reason(json.loads(out.getvalue() or "{}")))
+        faults = [r for r in _rows(self.state) if r["kind"] == "fault"]
+        self.assertEqual(len(faults), 1)
+        self.assertIn("RecursionError", faults[0]["detail"],
+                      "the fault row must name what went wrong, not merely that something did")
+        self.assertIs(faults[0]["failed_closed"], True)
+
+
+class TestTheSessionRowIsExactlyOnce(StateCase):
+    """Three separate defects in one function, all of them costing the liveness row this journal
+    exists to guarantee."""
+
+    def test_ids_differing_only_in_punctuation_are_not_one_session(self):
+        """`a/b` and `a?b` both sanitized to `a_b`, so the second session was read as already
+        noted and its row was never written."""
+        from ward import journal
+        journal.note_session({"session_id": "a/b", "tool_name": "T"}, root=self.state)
+        journal.note_session({"session_id": "a?b", "tool_name": "T"}, root=self.state)
+        got = sorted(r["session_id"] for r in _rows(self.state) if r["kind"] == "session")
+        self.assertEqual(got, ["a/b", "a?b"])
+
+    def test_a_failed_append_does_not_suppress_the_row_forever(self):
+        """The marker was committed BEFORE the row, so one swallowed write error silenced this
+        session's liveness row for the rest of its life."""
+        from ward import journal
+        original = journal._append
+        journal._append = lambda *a, **k: (_ for _ in ()).throw(OSError("disk full"))
+        self.addCleanup(setattr, journal, "_append", original)
+        journal.note_session({"session_id": "s1", "tool_name": "T"}, root=self.state)
+        journal._append = original
+        journal.note_session({"session_id": "s1", "tool_name": "T"}, root=self.state)
+        self.assertEqual(len([r for r in _rows(self.state) if r["kind"] == "session"]), 1)
+
+    def test_concurrent_processes_write_one_row_between_them(self):
+        """`exists()` then write is check-then-act, and concurrent hook processes are the NORMAL
+        condition here rather than an edge case -- several tool calls are in flight at once.
+
+        TWO THINGS MAKE THIS A PIN RATHER THAN A COIN FLIP, and both were arrived at by measuring
+        the test against the unfixed code rather than by reasoning about it.
+
+        A PIPE, not a flag file, releases the children. Forked with no barrier at all they start
+        staggered by the cost of fork itself: 9 catches in 10 runs. Polling a flag file was WORSE,
+        8 in 10 -- each child notices the file on its own schedule, so the poll reintroduces the
+        stagger it was meant to remove. Blocking every child on one read and closing the write end
+        hands the wakeup to the kernel, which releases them together.
+
+        SEVERAL ROUNDS, because one round of a genuinely narrow window is a probabilistic check,
+        and a race test that passes on racy code one run in ten is barely a test -- the run that
+        matters is the one nobody re-runs. Each round is an independent trial, so the miss
+        probability is the per-round miss raised to the number of rounds.
+        """
+        from ward import journal
+        for round_no in range(6):
+            session = f"race-{round_no}"
+            read_fd, write_fd = os.pipe()
+            kids = []
+            try:
+                for _ in range(16):
+                    pid = os.fork()
+                    if pid == 0:
+                        try:
+                            os.close(write_fd)
+                            os.read(read_fd, 1)   # released when the parent closes its end
+                            journal.note_session({"session_id": session, "tool_name": "T"},
+                                                 root=self.state)
+                        finally:
+                            os._exit(0)
+                    kids.append(pid)
+            finally:
+                # Release and reap in `finally`, so a fork() that fails part-way through the burst
+                # -- process-table exhaustion on a loaded machine -- cannot leave the children it
+                # DID create blocked on the pipe forever, nor leak their fds into the rest of the
+                # run. Found by an independent review pass.
+                os.close(write_fd)
+                for pid in kids:
+                    os.waitpid(pid, 0)
+                os.close(read_fd)
+            rows = [r for r in _rows(self.state)
+                    if r["kind"] == "session" and r["session_id"] == session]
+            self.assertEqual(len(rows), 1,
+                             f"round {round_no}: {len(rows)} rows for one session")
+
+class TestRepairCountsMeanWhatTheyAreNamed(StateCase):
+    """`repaired` counts undecodable BYTES. Summing the surrogate-ESCAPE count into it meant an
+    envelope whose bytes were flawless could report bytes repaired."""
+
+    def test_an_escape_only_envelope_reports_zero_bytes_repaired(self):
+        raw = (b'{"hook_event_name":"PreToolUse","tool_name":"Write","session_id":"w-esc",'
+               b'"cwd":"/tmp","tool_input":{"file_path":"/tmp/ok.py",'
+               b'"content":"# a\\ud89d\\nprint(1)\\n"}}')
+        _run(raw, self.state)
+        repair = [r for r in _rows(self.state) if r["kind"] == "repair"][0]
+        self.assertEqual(repair["repaired"], 0, "no byte on that wire was undecodable")
+        self.assertEqual(repair["escaped"], 1)
+
+    def test_a_byte_damaged_envelope_reports_zero_escapes(self):
+        _run(BENIGN_PY_WITH_BAD_BYTE, self.state)
+        repair = [r for r in _rows(self.state) if r["kind"] == "repair"][0]
+        self.assertEqual(repair["repaired"], 1)
+        self.assertEqual(repair["escaped"], 0)
 
 
 if __name__ == "__main__":
