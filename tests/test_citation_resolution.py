@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ward.citations import dangling_relative_references, relative_references
+from tools.citations import dangling_relative_references, relative_references
 
 
 REPO = Path(__file__).resolve().parent.parent
