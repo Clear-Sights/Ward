@@ -24,7 +24,7 @@ import os
 import re
 import textwrap
 import tokenize
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Optional
 
 # ================================================================================================
@@ -34,6 +34,11 @@ from typing import Any, Callable, Optional
 _WARD_ALLOW_RX = re.compile(r"ward-allow\s*:\s*\S", re.IGNORECASE)
 _PY_FILE_RX = re.compile(r"\.py$")
 _JWT_CALLEE_RX = re.compile(r"(?i)(?:^|\.)(?:jwt|jose|pyjwt)(?:\.|$)")
+# The file classes whose introduced TEXT the mutation checks scan. Shared by
+# `self_mute_guard` and `integrity_suppression_flag`, which are a matched pair: a suffix added
+# for one and not the other leaves that check blind on exactly the files it was extended to
+# cover, and the asymmetry reads in review as deliberate scoping rather than a missed edit.
+_MUTATION_TEXT_SUFFIX_RX = re.compile(r"(?i)\.(?:py|toml|ya?ml|json|ini|cfg|conf|sh|bash|zsh)$")
 
 
 def _allow_lines(content: str) -> frozenset[int]:
@@ -184,11 +189,20 @@ def _ast_introduced_check(node_match: Callable[[ast.AST], Optional[str]]) -> Cal
             tree, off = _parse_introduced(content)
             if tree is None:
                 continue
-            exempt = _allow_lines(content)
+            exempt = None
             for node in ast.walk(tree):
                 label = node_match(node)
                 if label:
                     line_no = max(1, getattr(node, "lineno", 1) - off)
+                    if exempt is None:
+                        # Deferred to the first MATCHING node, not hoisted above the walk. This
+                        # is the only consumer, `_allow_lines` costs a full pure-Python tokenize
+                        # pass over the payload (measured 10.5 ms on an 853-line file), and SEVEN
+                        # checks share this scaffold -- so computing it up front spent ~74 ms of a
+                        # 156 ms event tokenizing the same text seven times, and in the common
+                        # no-match case not one of the seven results was ever read. `_allow_lines`
+                        # is pure, so deferring it cannot change which lines come back exempt.
+                        exempt = _allow_lines(content)
                     # `continue`, never `return None`: one annotated line is one exemption. Stopping
                     # here would let a single legitimate marker carry every other unsafe line in the
                     # same write, which is the chunk-wide bypass this function was rewritten to close.
@@ -397,6 +411,12 @@ _CREDENTIAL_BASENAMES = frozenset({
 })
 _WRITE_NAMES = frozenset({"Write", "MultiEdit"})
 _EDIT_NAMES = frozenset({"Edit", "NotebookEdit"})
+# The tools whose introduced TEXT `self_mute_guard` and `integrity_suppression_flag` scan. This
+# is deliberately NOT `_WRITE_NAMES | _EDIT_NAMES`: that union carries `NotebookEdit`, and these
+# two checks have never covered it. Named here so the two remain one decision rather than two
+# literals that happen to match -- whether `NotebookEdit` belongs is a scope question, and it
+# should be answered once, here, not by whichever copy someone edits.
+_TEXT_MUTATION_NAMES = frozenset({"Write", "Edit", "MultiEdit"})
 _LOCATION_KEYS = ("file_path", "notebook_path")
 _WINDOWS_DRIVE_RELATIVE_RX = re.compile(r"^[A-Za-z]:(?:$|[^/\\])")
 
@@ -534,7 +554,7 @@ def _resolves_outside_cwd(file_path: str, cwd: str) -> Optional[bool]:
         target = _lexical_resolve(str(base / fp))
         root = base
     else:
-        target = _lexical_resolve(file_path)
+        target = fp
         if not cwd:
             return None
         root = _lexical_resolve(cwd)
@@ -555,18 +575,17 @@ def _under_harness_plans(target: PurePosixPath) -> bool:
     """True iff `target` lies at/under the host harness's own designated plan-artifact home,
     `<config-dir>/plans` — the one out-of-cwd location the harness itself instructs an agent to
     write to. Claude relocates its default `~/.claude` root when `CLAUDE_CONFIG_DIR` is set."""
-    from pathlib import Path
     configured = os.environ.get("CLAUDE_CONFIG_DIR")
-    config_root = configured or str(PurePosixPath(Path.home().as_posix()) / ".claude")
-    return _is_under(_lexical_resolve(str(PurePosixPath(config_root) / "plans")), target)
+    config_root = (PurePosixPath(configured) if configured
+                   else PurePosixPath(Path.home().as_posix()) / ".claude")
+    return _is_under(_lexical_resolve(str(config_root / "plans")), target)
 
 
 def _location_reason(name: str, file_path: str, cwd: str) -> Optional[str]:
     fp = _lexical_resolve(file_path)
-    if fp.is_absolute():
-        target = fp
-    elif cwd and _lexical_resolve(cwd).is_absolute():
-        target = _lexical_resolve(str(_lexical_resolve(cwd) / fp))
+    base = _lexical_resolve(cwd) if cwd else None
+    if not fp.is_absolute() and base is not None and base.is_absolute():
+        target = _lexical_resolve(str(base / fp))
     else:
         target = fp
 
@@ -688,17 +707,14 @@ def _removed_contents(tool_input: dict) -> tuple[str, ...]:
 
 def self_mute_guard(event: dict) -> Optional[str]:
     """Deny a mutation that explicitly disables a verifier or removes its callable shape."""
-    if event.get("hook_event_name") != "PreToolUse" or event.get("tool_name") not in {
-        "Write", "Edit", "MultiEdit",
-    }:
+    if (event.get("hook_event_name") != "PreToolUse"
+            or event.get("tool_name") not in _TEXT_MUTATION_NAMES):
         return None
     ti = event.get("tool_input")
     if not isinstance(ti, dict):
         return None
     path = ti.get("file_path", "")
-    if not isinstance(path, str) or not re.search(
-        r"(?i)\.(?:py|toml|ya?ml|json|ini|cfg|conf|sh|bash|zsh)$", path
-    ):
+    if not isinstance(path, str) or not _MUTATION_TEXT_SUFFIX_RX.search(path):
         return None
     introduced_parts = scan_target_contents(ti)
     introduced = "\n".join(introduced_parts)
@@ -734,14 +750,12 @@ _INTEGRITY_ENV_RX = re.compile(
     rf"getenv\s*\(\s*[\"']|\$\{{?)(?=[A-Z0-9_]*(?:{_CHECK_WORD}))"
     rf"(?=[A-Z0-9_]*(?:{_SUPPRESSION_SUFFIX}))[A-Z][A-Z0-9_]*"
 )
-_MUTATION_TEXT_SUFFIX_RX = re.compile(r"(?i)\.(?:py|toml|ya?ml|json|ini|cfg|conf|sh|bash|zsh)$")
 
 
 def integrity_suppression_flag(event: dict) -> Optional[str]:
     """Deny introducing an integrity-named suppression flag or environment-variable gate."""
-    if event.get("hook_event_name") != "PreToolUse" or event.get("tool_name") not in {
-        "Write", "Edit", "MultiEdit",
-    }:
+    if (event.get("hook_event_name") != "PreToolUse"
+            or event.get("tool_name") not in _TEXT_MUTATION_NAMES):
         return None
     ti = event.get("tool_input")
     if not isinstance(ti, dict):
