@@ -105,8 +105,8 @@ def read_stdin() -> tuple[str, int]:
         try:
             data = buffer.read()
         except (AttributeError, ValueError, OSError):
-            data = None
-        if data is not None:
+            pass
+        else:
             return _decode_counting(data)
     return scrub_text(sys.stdin.read() or "")
 

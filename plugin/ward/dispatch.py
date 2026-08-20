@@ -32,7 +32,7 @@ from ward import journal, wire
 from ward.checks import evaluate
 
 
-def read_event() -> tuple[dict[str, Any], int]:
+def read_event() -> tuple[dict[str, Any], int, int]:
     """Parse the hook envelope off stdin. Returns (event, undecodable_bytes, escaped_surrogates).
 
     Bytes, not text: see `ward.wire`. A lone surrogate must never reach a check, because a check
