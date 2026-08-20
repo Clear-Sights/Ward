@@ -17,6 +17,21 @@ import unittest
 import venv
 from pathlib import Path
 
+
+def _ck(cond, msg=""):
+    """An assertion that survives `-O`.
+
+    `assert` is compiled out entirely under -O/PYTHONOPTIMIZE, and this file carried 87 bare
+    `assert`s and zero `self.assert*`. Verified two-sided against this checkout's own tree: with
+    `ward.checks.evaluate` disarmed to `return None`, `python3 -m unittest tests.test_checks`
+    reported `FAILED (failures=43)` -- but `python3 -O -m unittest tests.test_checks` reported
+    `Ran 67 tests ... OK`, exit 0. Ward fully disarmed, its entire security parity suite green. A
+    test that cannot fail is not evidence, so the check has to outlive the optimizer.
+    """
+    if not cond:
+        raise AssertionError(msg or "check failed")
+
+
 REPO = Path(__file__).resolve().parent.parent
 # The shim cd-pins to CLAUDE_PLUGIN_ROOT, which is the installed plugin -- plugin/, not the
 # repository root. Pointing the tests at the repository root would exercise a layout no user has.
@@ -63,13 +78,13 @@ class Shim(unittest.TestCase):
         self.tmp_path = Path(scratch.name)
 
     def test_shim_is_executable(self):
-        assert os.access(SHIM, os.X_OK), "hooks/dispatch.sh must carry the executable bit in git"
+        _ck(os.access(SHIM, os.X_OK), "hooks/dispatch.sh must carry the executable bit in git")
 
     def test_hook_uses_exec_form_for_plugin_path(self):
         config = json.loads(HOOKS.read_text())
         handler = config["hooks"]["PreToolUse"][0]["hooks"][0]
-        assert handler["command"] == "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.sh"
-        assert handler["args"] == []
+        _ck(handler["command"] == "${CLAUDE_PLUGIN_ROOT}/hooks/dispatch.sh")
+        _ck(handler["args"] == [])
 
     def test_decoy_package_in_cwd_cannot_shadow_the_plugin(self):
         (self.tmp_path / "ward").mkdir()
@@ -78,28 +93,28 @@ class Shim(unittest.TestCase):
             "CLAUDE_PLUGIN_ROOT": str(PLUGIN),
             "PATH": f"{self.bare_python_dir}{os.pathsep}{os.environ['PATH']}",
         })
-        assert proc.returncode == 0, proc.stderr
+        _ck(proc.returncode == 0, proc.stderr)
         out = json.loads(proc.stdout)["hookSpecificOutput"]
-        assert out["permissionDecision"] == "deny"
-        assert "verify=False" in out["permissionDecisionReason"]
-        assert "ward.cert_verify_disabled" in out["permissionDecisionReason"]
+        _ck(out["permissionDecision"] == "deny")
+        _ck("verify=False" in out["permissionDecisionReason"])
+        _ck("ward.cert_verify_disabled" in out["permissionDecisionReason"])
 
     def test_unusable_plugin_root_fails_closed(self):
         proc = _run_shim(FLAGGED, cwd=self.tmp_path, env_overrides={})  # PLUGIN_ROOT absent
-        assert proc.returncode == 0, proc.stderr
+        _ck(proc.returncode == 0, proc.stderr)
         out = json.loads(proc.stdout)["hookSpecificOutput"]
-        assert out["permissionDecision"] == "deny"
-        assert "failing closed" in out["permissionDecisionReason"]
+        _ck(out["permissionDecision"] == "deny")
+        _ck("failing closed" in out["permissionDecisionReason"])
 
     def test_existing_non_plugin_root_fails_closed(self):
         proc = _run_shim(FLAGGED, cwd=self.tmp_path, env_overrides={
             "CLAUDE_PLUGIN_ROOT": str(self.tmp_path),
             "PATH": f"{self.bare_python_dir}{os.pathsep}{os.environ['PATH']}",
         })
-        assert proc.returncode == 0, proc.stderr
+        _ck(proc.returncode == 0, proc.stderr)
         out = json.loads(proc.stdout)["hookSpecificOutput"]
-        assert out["permissionDecision"] == "deny"
-        assert "failing closed" in out["permissionDecisionReason"]
+        _ck(out["permissionDecision"] == "deny")
+        _ck("failing closed" in out["permissionDecisionReason"])
 
     def test_malformed_hook_input_fails_closed(self):
         env = {k: v for k, v in os.environ.items()
@@ -107,7 +122,7 @@ class Shim(unittest.TestCase):
         env["CLAUDE_PLUGIN_ROOT"] = str(PLUGIN)
         proc = subprocess.run([str(SHIM)], input="{", text=True, capture_output=True,
                               cwd=self.tmp_path, env=env, timeout=30)
-        assert proc.returncode == 0, proc.stderr
+        _ck(proc.returncode == 0, proc.stderr)
         out = json.loads(proc.stdout)["hookSpecificOutput"]
-        assert out["permissionDecision"] == "deny"
-        assert "malformed" in out["permissionDecisionReason"]
+        _ck(out["permissionDecision"] == "deny")
+        _ck("malformed" in out["permissionDecisionReason"])
