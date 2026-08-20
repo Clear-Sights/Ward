@@ -19,5 +19,8 @@ license-files = ["LICENSE", "NOTICE"]
 where = ["plugin"]
 include = ["ward*"]
 
-["tests"]
+[tool.pytest.ini_options]
+# The suite runs under `python -m unittest discover -s tests`, which picks up the
+# package from `pip install -e .` (see .github/workflows/). This table only helps a
+# contributor who reaches for pytest against an uninstalled checkout.
 pythonpath = ["plugin"]

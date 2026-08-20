@@ -21,6 +21,7 @@ jobs:
 
       - name: Run the gates
         run: |
+          python3 -m pip install -e .
           python3 -m unittest discover -s tests
           python3 eval/replay.py
 

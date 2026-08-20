@@ -40,6 +40,19 @@ _JWT_CALLEE_RX = re.compile(r"(?i)(?:^|\.)(?:jwt|jose|pyjwt)(?:\.|$)")
 # for one and not the other leaves that check blind on exactly the files it was extended to
 # cover, and the asymmetry reads in review as deliberate scoping rather than a missed edit.
 _MUTATION_TEXT_SUFFIX_RX = re.compile(r"(?i)\.(?:py|toml|ya?ml|json|ini|cfg|conf|sh|bash|zsh)$")
+# Memo depth for the two payload caches below, ONE on purpose -- deeper is worse both ways, and the
+# waste being removed is entirely at depth 1 anyway: ONE introduced fragment read eight times
+# (`_cannot_evaluate` plus the seven `_ast_introduced_check` checks), the shape of every Write and
+# every single-`new_string` Edit. Measured, 8 parses become 1.
+#   * `evaluate` makes those eight passes over the same ORDERED fragment list, the access pattern
+#     LRU handles worst: once the fragment count exceeds the depth, each pass evicts exactly what
+#     the next pass asks for first and the hit rate does not degrade, it goes to ZERO. Depth 16 ran
+#     a 17-edit MultiEdit at 136 parses -- the uncached number -- while still pinning 16 trees.
+#   * Depth N holds N trees at once, and a tree costs many times its source. Depth 1 keeps peak
+#     memory on the LARGEST fragment, measured identical to the uncached code at 1, 2, 8 and 17
+#     fragments. Ward fails CLOSED by WRITING a deny, and a hook killed for memory writes nothing,
+#     which the host reads as no objection -- a speedup must not buy a new way to fail OPEN.
+_MEMO_SIZE = 1
 
 
 def _parse_candidates(dedented: str):
@@ -78,9 +91,11 @@ def _allow_lines(content: str) -> frozenset[int]:
     return _allow_lines_of(textwrap.dedent(content))
 
 
-@functools.lru_cache(maxsize=16)
+@functools.lru_cache(maxsize=_MEMO_SIZE)
 def _allow_lines_of(dedented: str) -> frozenset[int]:
-    """The tokenize pass behind `_allow_lines`, memoized on the dedented text it is given."""
+    """The tokenize pass behind `_allow_lines`, memoized on the dedented text it is given.
+
+    `_MEMO_SIZE`, for the reason spelled out there: same access pattern, same cliff."""
     for source, off in _parse_candidates(dedented):
         try:
             return frozenset(
@@ -127,7 +142,7 @@ def _parse_introduced(content: str):
     return _parse_dedented(textwrap.dedent(content))
 
 
-@functools.lru_cache(maxsize=16)
+@functools.lru_cache(maxsize=_MEMO_SIZE)
 def _parse_dedented(dedented: str):
     """The parse itself, memoized. `evaluate` runs `_cannot_evaluate` and then the seven
     `_ast_introduced_check` checks over the SAME introduced text, so one event parsed one payload
