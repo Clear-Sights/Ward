@@ -25,11 +25,44 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from typing import Any
 
 from ward import journal, wire
 from ward.checks import evaluate
+
+# The first bytes of the most recent envelope, kept ONLY so an unreadable event's fault row can
+# name its session. Reset at the top of every read_event call so one process handling multiple
+# reads (the test harness does) can never attribute this envelope's fault to the previous one.
+_RAW_PREFIX = ""
+_RAW_PREFIX_LEN = 4096
+
+# Simple scalar string fields only, matched textually: this runs precisely when json.loads could
+# NOT parse the payload, so it must not assume any structure beyond `"key": "value"` substrings.
+_ATTR_RX = {
+    "session_id": re.compile(r'"session_id"\s*:\s*"([^"\\]{1,200})"'),
+    "tool_name": re.compile(r'"tool_name"\s*:\s*"([^"\\]{1,200})"'),
+    "hook_event_name": re.compile(r'"hook_event_name"\s*:\s*"([^"\\]{1,200})"'),
+}
+
+
+def _fault_attribution() -> dict[str, Any]:
+    """Best-effort ids for an envelope that could not be parsed, from its raw prefix.
+
+    An unreadable event used to be filed as `note_fault({}, ...)` -- session_id/tool_name/
+    hook_event all empty -- even when those fields sat verbatim in the first bytes of the
+    payload. Since `route` never runs for such an event, no session row is written either, so a
+    session in which every event was refused as unreadable was indistinguishable in the journal
+    from a session where Ward never ran: the exact question the journal exists to answer.
+    Textual extraction, never a parse; empty dict when nothing legible is there.
+    """
+    out: dict[str, Any] = {}
+    for key, rx in _ATTR_RX.items():
+        m = rx.search(_RAW_PREFIX)
+        if m:
+            out[key] = m.group(1)
+    return out
 
 
 def read_event() -> tuple[dict[str, Any], int, int]:
@@ -38,7 +71,17 @@ def read_event() -> tuple[dict[str, Any], int, int]:
     Bytes, not text: see `ward.wire`. A lone surrogate must never reach a check, because a check
     handed one reports a fact about the encoding while claiming to report one about the action.
     """
+    global _RAW_PREFIX
+    _RAW_PREFIX = ""
     raw, repaired = wire.read_stdin()
+    _RAW_PREFIX = raw[:_RAW_PREFIX_LEN]
+    # A UTF-8 BOM on the envelope strict-decodes to a leading U+FEFF that json.loads REFUSES
+    # ("Unexpected UTF-8 BOM (decode using utf-8-sig)"). Reproduced: a BOM-prefixed but
+    # structurally perfect PreToolUse envelope took the malformed-input handler and Ward
+    # hard-denied a benign action with a reason that was false of the payload -- the exact
+    # "deny on a false fact" this module's docstring forbids. A BOM is an encoding artifact,
+    # not damage, so it is stripped rather than counted as a repair.
+    raw = raw.lstrip("\ufeff")
     if not raw.strip():
         raise ValueError("empty stdin")
     event = json.loads(raw)
@@ -196,7 +239,8 @@ def _run() -> int:
         # expensive to parse was the one input Ward did not rule on -- fail-OPEN, in the plugin
         # whose entire premise is that it never does that. Anything read_event can raise is an
         # envelope Ward could not inspect, and every one of them takes the same closed exit.
-        journal.note_fault({}, "unreadable_event", f"{type(e).__name__}: {e}", failed_closed=True)
+        journal.note_fault(_fault_attribution(), "unreadable_event",
+                           f"{type(e).__name__}: {e}", failed_closed=True)
         # Via `_warn`, and it has to be: this print sat between the fault and the deny,
         # unprotected, and an unwritable stderr raised here took the deny down with it -- the same
         # defect this handler was written to close, one line lower down. See `_warn`.
