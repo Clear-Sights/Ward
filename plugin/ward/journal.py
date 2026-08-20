@@ -8,7 +8,7 @@ gate that cannot show it ran is indistinguishable from one that was never instal
 exactly like a gate that ran and found nothing.
 
 WHAT IS RECORDED, AND WHY NOT EVERYTHING
-Three row kinds, deliberately not four:
+Four row kinds, deliberately not five:
 
   * `session` -- ONE row the first time Ward sees a given session. This is the liveness proof, and
     it is why the log answers "did Ward run" separately from "did Ward catch anything". Without it
@@ -16,6 +16,7 @@ Three row kinds, deliberately not four:
     session list means not-installed and a session row with no denies means genuinely clean.
   * `deny` -- every refusal, naming the check that produced it.
   * `fault` -- every internal error, i.e. every event Ward could not evaluate.
+  * `repair` -- every envelope repaired before evaluation.
 
 There is deliberately NO row per allowed call. Makoto measured that policy directly and found such
 a log runs 99%+ noise; a log nobody can read is a log nobody reads, and the signal drowns.
@@ -57,24 +58,33 @@ def state_dir() -> pathlib.Path:
 
 
 def _append(row: dict, root: pathlib.Path | None = None) -> None:
-    """Append one compact JSON line. POSIX guarantees atomicity for short append-mode writes
-    (<= PIPE_BUF), and a row is far under, so concurrent hook processes cannot interleave."""
+    """Append one compact JSON line with owner-only permissions.
+
+    O_APPEND, not seek-then-write: POSIX guarantees atomicity for short append-mode writes
+    (<= PIPE_BUF), and a row is far under, so concurrent hook processes cannot interleave.
+    The directory is 0700 and the file 0600 because the log names sessions and denied calls.
+    """
     root = root or state_dir()
-    root.mkdir(parents=True, exist_ok=True)
-    with (root / "decisions.jsonl").open("a", encoding="utf-8") as fh:
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(root, 0o700)
+    path = root / "decisions.jsonl"
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    with os.fdopen(fd, "a", encoding="utf-8") as fh:
         # ensure_ascii=True keeps every byte written here in the ASCII range, so this writer cannot
         # itself become the encoding failure it exists to record.
         fh.write(json.dumps(row, separators=(",", ":"), sort_keys=True) + "\n")
 
 
 def _row(event: dict, kind: str, **extra) -> dict:
+    def bounded(value) -> str:
+        return str(value or "")[:400]
     return {
         "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "plugin": PLUGIN,
         "kind": kind,
-        "session_id": str(event.get("session_id") or ""),
-        "tool_name": str(event.get("tool_name") or ""),
-        "hook_event": str(event.get("hook_event_name") or ""),
+        "session_id": bounded(event.get("session_id")),
+        "tool_name": bounded(event.get("tool_name")),
+        "hook_event": bounded(event.get("hook_event_name")),
         **extra,
     }
 
@@ -161,11 +171,20 @@ def _claim(marker: pathlib.Path) -> bool:
     except FileExistsError:
         return _steal_if_stale(marker)
     except FileNotFoundError:
-        marker.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return True
         try:
             fd = os.open(marker, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         except FileExistsError:
             return _steal_if_stale(marker)
+        except OSError:
+            return True
+    except OSError:
+        # A broken/unwritable sessions path must not suppress the only liveness row. The caller
+        # will append without a marker and retry on later calls: noisy, but never silent.
+        return True
     os.close(fd)
     return True
 

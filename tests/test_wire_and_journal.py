@@ -86,6 +86,7 @@ class TestTheFalseDeny(StateCase):
         """Pin the false reason itself, not merely 'did not deny'. A future change that reintroduces
         the deny under any wording should fail here with the wording named."""
         _code, body = _run(BENIGN_PY_WITH_BAD_BYTE, self.state)
+        self.assertEqual(body, {}, "a silent or altered allow payload cannot satisfy a wording-only check")
         self.assertNotIn("cannot be parsed independently", _reason(body))
 
     def test_real_violation_with_a_bad_byte_still_denies(self):

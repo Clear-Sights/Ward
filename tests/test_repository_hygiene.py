@@ -23,12 +23,10 @@ class RepositoryHygiene(unittest.TestCase):
         """render_readme_images.py works in a mkdtemp under docs/img; a committed one ships a
         whole headless-Chromium profile (History, Web Data, Login Data databases) as repository
         content. Three such directories were found tracked and removed; this pins the removal."""
-        import subprocess
-        tracked = subprocess.run(
-            ["git", "-C", str(REPO), "ls-files", "docs/img"],
-            capture_output=True, text=True, check=True,
-        ).stdout.splitlines()
-        strays = [line for line in tracked if ".ward-readme-images-" in line]
+        from tools.render_readme_images import IMAGE_DIR
+        self.assertTrue(IMAGE_DIR.is_dir(), f"the renderer image directory is missing: {IMAGE_DIR}")
+        strays = [str(path.relative_to(REPO)) for path in IMAGE_DIR.rglob("*")
+                  if ".ward-readme-images-" in path.name]
         self.assertEqual(strays, [], "render scratch directories are tracked: remove them")
 
     def test_security_guide_uses_the_supported_stdlib_test_command(self):
