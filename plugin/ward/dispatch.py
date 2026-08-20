@@ -53,8 +53,26 @@ def read_event() -> tuple[dict[str, Any], int, int]:
     return event, repaired, escaped
 
 
-def emit(payload: dict[str, Any]) -> None:
-    sys.stdout.write(json.dumps(payload))
+def emit(payload: dict[str, Any]) -> bool:
+    """Write the decision to stdout. Returns False iff the write could not be completed.
+
+    GUARDED for the mirror reason `_warn` is, with the OPPOSITE recovery. `_warn` carries a
+    diagnostic, so losing it is cheap and it swallows. This carries the VERDICT, so losing it is the
+    refusal not being delivered -- and an unhandled `OSError` here (a full disk, `>/dev/full`, EPIPE
+    on the first byte) escaped `_run` AND `main`, killed the process with a traceback, and left the
+    host reading exit 1. For PreToolUse a nonzero exit other than 2 is a non-blocking error, i.e.
+    ALLOW. So the one write Ward cannot afford to lose was exactly the write whose loss turned a
+    fail-closed deny into a pass. Callers convert False into the closed exit instead.
+
+    Flushed inside the guard on purpose: without it the write sits in the buffer and fails during
+    interpreter shutdown, far outside any handler, which is the same crash one layer later.
+    """
+    try:
+        sys.stdout.write(json.dumps(payload))
+        sys.stdout.flush()
+        return True
+    except Exception:
+        return False
 
 
 def deny(reason: str) -> dict[str, Any]:
@@ -65,7 +83,7 @@ def deny(reason: str) -> dict[str, Any]:
     }}
 
 
-def _warn(text: str) -> None:
+def _warn(text: str) -> bool:
     """Write one diagnostic line to stderr, swallowing the failure if that write fails.
 
     GUARDED, and it has to be: every caller is a fail-closed handler that reports between the fault
@@ -75,11 +93,43 @@ def _warn(text: str) -> None:
     failure, in the one plugin whose whole premise is that it never fails open. Reporting must never
     outrank deciding, and one helper is what stops the next handler re-opening the hole with a bare
     `print`.
+
+    Returns True iff the diagnostic actually landed, so a caller never tells the user to go read a
+    stderr line that was never written -- a deny must not rest on a false fact, including a false
+    fact about itself.
+
+    The `sys.stderr is None` arm is not defensive noise: CPython sets `sys.stderr` to None when fd 2
+    is CLOSED (`2>&-`), and `print(file=None)` does not no-op, it targets STDOUT. That spliced this
+    diagnostic in front of the JSON object the host parses -- `ward.dispatch: JSONDecodeError...`
+    followed by the deny -- which no host can read, so the deny was lost by the very line written to
+    explain it. Reporting must never outrank deciding.
     """
+    if sys.stderr is None:
+        return False
     try:
         print(text, file=sys.stderr)
+        return True
     except Exception:
-        pass
+        return False
+
+
+_WIRE_LOST_EXIT = 2   # PreToolUse: exit 2 is the host's blocking error, and stderr reaches the agent.
+
+
+def _emit_or_closed(payload: dict[str, Any]) -> int:
+    """Write `payload`, and pick the exit status that preserves its MEANING if the write is lost.
+
+    A lost DENY must not read as a pass, so it falls back to exit 2 -- the host's blocking error and
+    the only channel left once stdout is gone. A lost `{}` needs no fallback: "no opinion" and "no
+    output" are the same answer to the host, and failing closed there would invent a refusal Ward
+    never made. Fail closed on the decision, not on the silence.
+    """
+    if emit(payload):
+        return 0
+    if not payload:
+        return 0
+    _warn("ward.dispatch: could not write the decision to stdout; exiting closed.")
+    return _WIRE_LOST_EXIT
 
 
 def route(event: dict[str, Any]) -> dict[str, Any]:
@@ -150,12 +200,15 @@ def _run() -> int:
         # Via `_warn`, and it has to be: this print sat between the fault and the deny,
         # unprotected, and an unwritable stderr raised here took the deny down with it -- the same
         # defect this handler was written to close, one line lower down. See `_warn`.
-        _warn(f"ward.dispatch: {type(e).__name__}: {e}")
-        emit(deny(
+        landed = _warn(f"ward.dispatch: {type(e).__name__}: {e}")
+        # The pointer is conditional because the line it points at is: `_warn` swallows an
+        # unwritable stderr, and a deny that says "see dispatch stderr" when nothing reached stderr
+        # asserts a fact that is false, in the module whose rule is that a deny never does that.
+        seen = " (see dispatch stderr)" if landed else ""
+        return _emit_or_closed(deny(
             "ward: malformed hook input; failing closed because the pending action could not be "
-            "inspected (see dispatch stderr)."
+            f"inspected{seen}."
         ))
-        return 0
     if repaired or escaped:
         # Recorded, and NOT a fault: the event was evaluated, on a repaired payload. Conflating the
         # two would inflate the count of unevaluated calls, which is the number this log exists to
@@ -171,17 +224,15 @@ def _run() -> int:
         journal.note_fault(event, "check_raised", f"{type(e).__name__}: {e}", failed_closed=True)
         # Guarded for the same reason as the handler above: an unwritable stderr must not be able
         # to stop the deny underneath it from reaching the wire. See `_warn`.
-        _warn(f"ward.dispatch: check raised {e!r}")
+        landed = _warn(f"ward.dispatch: check raised {e!r}")
+        seen = " (see dispatch stderr)" if landed else ""
         if event.get("hook_event_name") == "PreToolUse":
-            emit(deny(
-                "ward: internal error while a safety check was due to run; failing closed "
-                "(see dispatch stderr). Retry the call; report if it persists."
+            return _emit_or_closed(deny(
+                "ward: internal error while a safety check was due to run; failing closed"
+                f"{seen}. Retry the call; report if it persists."
             ))
-            return 0
-        emit({})
-        return 0
-    emit(result)
-    return 0
+        return _emit_or_closed({})
+    return _emit_or_closed(result)
 
 
 if __name__ == "__main__":
