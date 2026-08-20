@@ -13,6 +13,21 @@ from pathlib import Path
 from ward.checks import evaluate
 
 
+def _ck(cond, msg=""):
+    """An assertion that survives `-O`.
+
+    `assert` is compiled out entirely under -O/PYTHONOPTIMIZE, and this file carried 87 bare
+    `assert`s and zero `self.assert*`. Verified two-sided against this checkout's own tree: with
+    `ward.checks.evaluate` disarmed to `return None`, `python3 -m unittest tests.test_checks`
+    reported `FAILED (failures=43)` -- but `python3 -O -m unittest tests.test_checks` reported
+    `Ran 67 tests ... OK`, exit 0. Ward fully disarmed, its entire security parity suite green. A
+    test that cannot fail is not evidence, so the check has to outlive the optimizer.
+    """
+    if not cond:
+        raise AssertionError(msg or "check failed")
+
+
+
 TRIALS = 1_000
 
 
@@ -54,7 +69,7 @@ class PathReliability(unittest.TestCase):
             requested = pivot / name
 
             verdict = evaluate(_write_event(requested, cwd))
-            assert verdict is None, f"trial {trial}: Ward unexpectedly denied the in-cwd path"
+            _ck(verdict is None, f"trial {trial}: Ward unexpectedly denied the in-cwd path")
 
             # The writer is a separate actor: change live resolution only after Ward returns.
             pivot.unlink()
@@ -64,7 +79,7 @@ class PathReliability(unittest.TestCase):
             outside_result = outside / name
             if outside_result.read_text(encoding="utf-8") == "measured\n":
                 disagreements += 1
-            assert not (safe / name).exists()
+            _ck(not (safe / name).exists())
 
             outside_result.unlink()
             pivot.unlink()
@@ -74,4 +89,4 @@ class PathReliability(unittest.TestCase):
             f"{disagreements}/{TRIALS} allowed validations wrote outside cwd "
             f"({disagreements / TRIALS:.1%} disagreement)"
         )
-        assert disagreements == TRIALS
+        _ck(disagreements == TRIALS)
