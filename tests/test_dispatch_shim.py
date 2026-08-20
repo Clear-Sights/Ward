@@ -47,6 +47,9 @@ FLAGGED = {"hook_event_name": "PreToolUse", "tool_name": "Write",
 
 def _run_shim(event: dict | None, cwd: Path, env_overrides: dict) -> subprocess.CompletedProcess:
     env = {k: v for k, v in os.environ.items() if k not in ("CLAUDE_PLUGIN_ROOT", "PYTHONPATH")}
+    # The shim runs the real dispatcher, which journals every fabricated deny/fault. Keep that
+    # evidence inside this test's disposable directory rather than polluting the operator's log.
+    env["WARD_STATE_DIR"] = str(cwd / "ward-test-state")
     env.update(env_overrides)
     return subprocess.run([str(SHIM)], input=json.dumps(event or {}), text=True,
                           capture_output=True, cwd=cwd, env=env, timeout=30)
@@ -106,6 +109,11 @@ class Shim(unittest.TestCase):
         _ck(out["permissionDecision"] == "deny")
         _ck("failing closed" in out["permissionDecisionReason"])
 
+    def test_empty_plugin_root_fails_closed(self):
+        proc = _run_shim(FLAGGED, cwd=self.tmp_path, env_overrides={"CLAUDE_PLUGIN_ROOT": ""})
+        _ck(proc.returncode == 0, proc.stderr)
+        _ck(json.loads(proc.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny")
+
     def test_existing_non_plugin_root_fails_closed(self):
         proc = _run_shim(FLAGGED, cwd=self.tmp_path, env_overrides={
             "CLAUDE_PLUGIN_ROOT": str(self.tmp_path),
@@ -120,9 +128,43 @@ class Shim(unittest.TestCase):
         env = {k: v for k, v in os.environ.items()
                if k not in ("CLAUDE_PLUGIN_ROOT", "PYTHONPATH")}
         env["CLAUDE_PLUGIN_ROOT"] = str(PLUGIN)
+        env["WARD_STATE_DIR"] = str(self.tmp_path / "ward-test-state")
         proc = subprocess.run([str(SHIM)], input="{", text=True, capture_output=True,
                               cwd=self.tmp_path, env=env, timeout=30)
         _ck(proc.returncode == 0, proc.stderr)
         out = json.loads(proc.stdout)["hookSpecificOutput"]
         _ck(out["permissionDecision"] == "deny")
         _ck("malformed" in out["permissionDecisionReason"])
+
+    def test_missing_python_fails_closed(self):
+        tools = self.tmp_path / "no-python"
+        tools.mkdir()
+        (tools / "bash").symlink_to("/bin/bash")
+        proc = _run_shim(FLAGGED, cwd=self.tmp_path, env_overrides={
+            "CLAUDE_PLUGIN_ROOT": str(PLUGIN), "PATH": str(tools),
+        })
+        _ck(proc.returncode == 0, proc.stderr)
+        _ck(json.loads(proc.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny")
+
+    def test_dispatcher_nonzero_exit_fails_closed(self):
+        tools = self.tmp_path / "failed-python"
+        tools.mkdir()
+        (tools / "bash").symlink_to("/bin/bash")
+        fake_python = tools / "python3"
+        fake_python.write_text("#!/bin/sh\nexit 1\n")
+        fake_python.chmod(0o755)
+        proc = _run_shim(FLAGGED, cwd=self.tmp_path, env_overrides={
+            "CLAUDE_PLUGIN_ROOT": str(PLUGIN), "PATH": str(tools),
+        })
+        _ck(proc.returncode == 0, proc.stderr)
+        _ck(json.loads(proc.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny")
+
+    def test_allow_payload_passes_through_byte_for_byte(self):
+        event = {"hook_event_name": "PreToolUse", "tool_name": "Read",
+                 "tool_input": {"file_path": "/workspace/repo/a.txt"}, "cwd": "/workspace/repo"}
+        proc = _run_shim(event, cwd=self.tmp_path, env_overrides={
+            "CLAUDE_PLUGIN_ROOT": str(PLUGIN),
+            "PATH": f"{self.bare_python_dir}{os.pathsep}{os.environ['PATH']}",
+        })
+        _ck(proc.returncode == 0, proc.stderr)
+        _ck(proc.stdout == "{}", proc.stdout)
