@@ -14,7 +14,10 @@ dependencies = []
 license-files = ["LICENSE", "NOTICE"]
 
 [tool.setuptools.packages.find]
+# The package lives under plugin/ -- that directory IS the installed plugin, and nothing
+# outside it ships. See .claude-plugin/marketplace.json.
+where = ["plugin"]
 include = ["ward*"]
 
 ["tests"]
-pythonpath = ["."]
+pythonpath = ["plugin"]

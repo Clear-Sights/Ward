@@ -29,9 +29,14 @@ jobs:
           VERSION="${{ github.event.inputs.version }}"
           STAGE="ward-$VERSION"
           mkdir "$STAGE"
-          cp -r ward hooks pyproject.toml LICENSE NOTICE README.md SECURITY.md "$STAGE"/
+          cp -r plugin/ward plugin/hooks plugin/.claude-plugin \
+             pyproject.toml LICENSE NOTICE README.md SECURITY.md "$STAGE"/
           zip -qr "ward-$VERSION.zip" "$STAGE"
           unzip -l "ward-$VERSION.zip" | grep -q "eval/" && exit 1 || true
+          # Asserted, not assumed. The bundle copies plugin/ contents, so a test file can only
+          # appear here if the suite moved back inside the installed subtree -- which is the
+          # thing this layout exists to prevent, and it would look correct from the outside.
+          unzip -l "ward-$VERSION.zip" | grep -q "tests/" && exit 1 || true
 
       - name: Create tag and GitHub Release
         env:

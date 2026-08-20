@@ -18,8 +18,11 @@ import venv
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-SHIM = REPO / "hooks" / "dispatch.sh"
-HOOKS = REPO / "hooks" / "hooks.json"
+# The shim cd-pins to CLAUDE_PLUGIN_ROOT, which is the installed plugin -- plugin/, not the
+# repository root. Pointing the tests at the repository root would exercise a layout no user has.
+PLUGIN = REPO / "plugin"
+SHIM = PLUGIN / "hooks" / "dispatch.sh"
+HOOKS = PLUGIN / "hooks" / "hooks.json"
 
 FLAGGED = {"hook_event_name": "PreToolUse", "tool_name": "Write",
            "tool_input": {"file_path": "/workspace/repo/mod.py",
@@ -72,7 +75,7 @@ class Shim(unittest.TestCase):
         (self.tmp_path / "ward").mkdir()
         (self.tmp_path / "ward" / "__init__.py").write_text("")
         proc = _run_shim(FLAGGED, cwd=self.tmp_path, env_overrides={
-            "CLAUDE_PLUGIN_ROOT": str(REPO),
+            "CLAUDE_PLUGIN_ROOT": str(PLUGIN),
             "PATH": f"{self.bare_python_dir}{os.pathsep}{os.environ['PATH']}",
         })
         assert proc.returncode == 0, proc.stderr
@@ -101,7 +104,7 @@ class Shim(unittest.TestCase):
     def test_malformed_hook_input_fails_closed(self):
         env = {k: v for k, v in os.environ.items()
                if k not in ("CLAUDE_PLUGIN_ROOT", "PYTHONPATH")}
-        env["CLAUDE_PLUGIN_ROOT"] = str(REPO)
+        env["CLAUDE_PLUGIN_ROOT"] = str(PLUGIN)
         proc = subprocess.run([str(SHIM)], input="{", text=True, capture_output=True,
                               cwd=self.tmp_path, env=env, timeout=30)
         assert proc.returncode == 0, proc.stderr
