@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import re
 import sys
+from typing import Any
 
 REPLACEMENT = "�"
 
@@ -49,7 +50,7 @@ def scrub_text(text: str) -> tuple[str, int]:
     return _SURROGATE_RX.subn(REPLACEMENT, text)
 
 
-def scrub(value):
+def scrub(value: Any) -> tuple[Any, int]:
     """Recursively scrub every str inside a parsed JSON value; return (value, total replaced).
 
     Keys as well as values: a surrogate in a key reaches the same encoder, and an unserializable
@@ -59,12 +60,12 @@ def scrub(value):
     if isinstance(value, str):
         return scrub_text(value)
     if isinstance(value, dict):
-        out, total = {}, 0
+        out, total, next_suffix = {}, 0, {}
         for k, v in value.items():
             if isinstance(k, str):
                 k, n = scrub_text(k)
                 total += n
-                if n and (k in out or k in value):
+                if n:
                     # Scrubbing is NOT injective on keys: every surrogate becomes the same U+FFFD,
                     # so two genuinely different damaged keys collapse onto one name and the plain
                     # assignment below dropped the earlier one's VALUE on the floor without a word.
@@ -75,10 +76,21 @@ def scrub(value):
                     # values reachable and keeps the collision visible in the persisted row.
                     # Tested against `value` as well as `out` so a CLEAN key later in the dict
                     # keeps its own name rather than being overwritten by a repaired one.
-                    suffix = 2
-                    while f"{k}~{suffix}" in out or f"{k}~{suffix}" in value:
+                    #
+                    # `next_suffix` resumes where this base's last search stopped instead of
+                    # restarting at 2. Every suffix below that point was already rejected as taken,
+                    # and neither `out` nor `value` ever gives a name back, so the names handed out
+                    # are exactly the ones the rescan produced, in a constant number of probes
+                    # per key rather than a walk from 2. The rescan was QUADRATIC in the number of
+                    # keys collapsing onto one name, and that number is attacker-influenced: 4096
+                    # `\uD8xx`-escaped keys in one `tool_input` measured 18s inside a PreToolUse
+                    # hook (0.06s here), and a host timeout on a hook is no decision at all.
+                    base = k
+                    suffix = next_suffix.get(base, 2)
+                    while k in out or k in value:
+                        k = f"{base}~{suffix}"
                         suffix += 1
-                    k = f"{k}~{suffix}"
+                    next_suffix[base] = suffix
             v, n = scrub(v)
             total += n
             out[k] = v
