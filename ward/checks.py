@@ -541,19 +541,13 @@ def _resolves_outside_cwd(file_path: str, cwd: str) -> Optional[bool]:
     if str(target) == str(root):
         return False
     root_parts, target_parts = root.parts, target.parts
-    if len(target_parts) < len(root_parts):
-        return True
-    if target_parts[: len(root_parts)] == root_parts:
-        return False
-    return True
+    return target_parts[: len(root_parts)] != root_parts
 
 
 def _is_under(root: PurePosixPath, target: PurePosixPath) -> bool:
     if not root.is_absolute():
         return False
     root_parts, target_parts = root.parts, target.parts
-    if len(target_parts) < len(root_parts):
-        return False
     return target_parts[: len(root_parts)] == root_parts
 
 
