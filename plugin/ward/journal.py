@@ -21,7 +21,7 @@ Four row kinds, deliberately not five:
 There is deliberately NO row per allowed call. Makoto measured that policy directly and found such
 a log runs 99%+ noise; a log nobody can read is a log nobody reads, and the signal drowns.
 
-EVERY ROW NAMES ITS PLUGIN. Ward, Gyroscope and Makoto all register PreToolUse `*`, all three can
+EVERY ROW NAMES ITS PLUGIN. Ward, Keel and Makoto all register PreToolUse `*`, all three can
 emit a deny, and the host does not tell the user which one spoke. A row that does not name its
 author is unattributable the moment more than one is installed -- which is the shipped Courthouse
 configuration, not an edge case. `plugin` is that name, and the deny reason on the wire carries the

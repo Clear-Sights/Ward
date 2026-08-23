@@ -9,7 +9,7 @@ Ward fails CLOSED on everything: malformed input, a check that raises, a shim th
 Not because closed is universally right, but because of what Ward judges. Ward rules on the ACT,
 and a dangerous act allowed is not recoverable at the next event or at Stop -- the write landed,
 the credential left, the key was accepted. Its siblings judge the STATEMENT (Makoto) and the
-SEQUENCE (Gyroscope), where a missed evaluation is recoverable later in the same session, so they
+SEQUENCE (Keel), where a missed evaluation is recoverable later in the same session, so they
 fail open on carriage and stay loud about it. The axis decides the direction; recoverability is the
 axis. A plugin does not get to pick by taste, and the three of them no longer differ by accident.
 
