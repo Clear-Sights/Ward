@@ -1,0 +1,3 @@
+KEY	VALUE	DENOMINATOR	COMMAND	SUBJECT
+dispatch-exit	0	-	python3 tools/measure.py dispatch-exit	dispatch shim status for a denial
+replay-exit	0	-	python3 tools/measure.py replay-exit	corpus replay status when every session meets its expectation
