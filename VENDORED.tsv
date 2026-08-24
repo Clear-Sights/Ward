@@ -1,0 +1,13 @@
+# Vendored-contract ledger.  Each row pins the digest of one symbol this repository
+# copied from another, so drift must be re-pinned deliberately rather than happening
+# quietly.  A digest covers argument names and the AST body with the leading docstring
+# removed -- the copies already differ in docstrings and are correct -- and, for a
+# constant row, the constant's value.  Comments and formatting are not part of it.
+# Every in-repository constant a fenced body reads carries its own row: changing a
+# regex drifts behaviour without touching any body, so bodies alone are not enough.
+# This fence compares each copy against its own pinned digest, never against the
+# owner's live source: no repository reads another's tree.
+# Keel owns note_fault: Keel's journal carries the discharge semantics Ward lacks, so the
+# helper is native there and Ward's copy is the vendored one.
+SYMBOL	LOCAL-PATH	OWNER-REPO	OWNER-PATH	DIGEST	WHY
+note_fault	plugin/ward/journal.py	Keel	plugin/keel/journal.py	874dcd28a9e000d099a0f8dc2ce5a491f751f82c8d57b8347c0c3030d8628529	Fault journal helper vendored from Keel
