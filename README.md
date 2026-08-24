@@ -209,7 +209,7 @@ Run the standard-library suite from the repository root:
 <!-- BEGIN GENERATED suite-output -->
 $ python3 -m unittest discover -s tests
 ...
-Ran 114 tests in <elapsed>s
+Ran 123 tests in <elapsed>s
 
 OK
 <!-- END GENERATED suite-output -->
@@ -225,7 +225,7 @@ only.
 It exits with status 0 iff every session meets its expectation.[^m-replay-exit]
 
 <!-- BEGIN GENERATED suite-count -->
-The shipped suite contains 114 tests. Keep new predicates narrow, add both firing and clean cases,
+The shipped suite contains 123 tests. Keep new predicates narrow, add both firing and clean cases,
 and exercise the shell entrypoint when changing hook wiring.
 <!-- END GENERATED suite-count -->
 
