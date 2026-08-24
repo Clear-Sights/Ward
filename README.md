@@ -20,9 +20,11 @@ Ward sits before the act: the call is denied with a citation and a retry hint be
 
 ## Quickstart
 
+<!-- BEGIN GENERATED quickstart-checks -->
 Ward is a Claude Code `PreToolUse` plugin: an ordered 11-row table of exact denials over the
 pending tool call. A match denies with a citation and a retry hint; anything else is a silent
 `{}`. No state, no history, no configuration.
+<!-- END GENERATED quickstart-checks -->
 
 Ward requires Python 3.11 or newer and has no Python package dependencies. From a local checkout:
 
@@ -43,13 +45,15 @@ To exercise that same bridge without modifying a file:
 $ printf '%s' '{"hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":"/etc/ward-smoke","content":"x"},"cwd":"/tmp"}' | CLAUDE_PLUGIN_ROOT="$PWD/plugin" plugin/hooks/dispatch.sh
 ```
 
-The response contains `permissionDecision: "deny"`. The shell exits normally with status 0: a
+The response contains `permissionDecision: "deny"`. The shell exits normally with status 0[^m-dispatch-exit]: a
 denial is a hook decision for the host to consume, not a process fault.
 
 ## What Ward denies
 
+<!-- BEGIN GENERATED checks-heading -->
 The ordered `CHECKS` table in [plugin/ward/checks.py](plugin/ward/checks.py) contains these 11 rows. The first
 matching row wins.
+<!-- END GENERATED checks-heading -->
 
 | Row | Denies |
 |---|---|
@@ -65,9 +69,11 @@ matching row wins.
 | `ward.self_mute_guard` | A supported source, configuration, or shell-file mutation that explicitly disables a verifier/check or removes its callable shape from a replacement. |
 | `ward.integrity_suppression_flag` | A supported source, configuration, or shell-file mutation that introduces an audit/verification/integrity/attestation/checksum/signature/tamper/provenance suppression flag or environment-variable gate. |
 
-The seven rows from `ward.timing_unsafe_compare` through
+<!-- BEGIN GENERATED contiguous-checks -->
+The 7 rows from `ward.timing_unsafe_compare` through
 `ward.paramiko_host_key_weakened` parse only newly introduced Python in a `.py` mutation. The other
-four use path text, serialized outbound payloads, or introduced-versus-removed mutation text.
+4 use path text, serialized outbound payloads, or introduced-versus-removed mutation text.
+<!-- END GENERATED contiguous-checks -->
 
 Evaluate coverage here, not only in [Scope, precisely](#scope-precisely): NotebookEdit receives the
 `ward.forbidden_location` path check, but its cell text is **not** parsed by the seven
@@ -75,10 +81,12 @@ introduced-Python rows.
 
 ## How dispatch works
 
+<!-- BEGIN GENERATED dispatch-image -->
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/dispatch-flow-dark.png">
   <img src="docs/img/dispatch-flow-light.png" alt="Pending tool call through Ward's single entrypoint and 11-row denial table">
 </picture>
+<!-- END GENERATED dispatch-image -->
 
 [plugin/ward/dispatch.py](plugin/ward/dispatch.py) reads one JSON event. For a `PreToolUse` event, it applies the
 mutation-input preflight where relevant, then evaluates the rows in order and emits one of two
@@ -88,10 +96,12 @@ protocol shapes:
   reason, and its retry hint.
 - No match becomes `{}` — no opinion and no output-side rewrite.
 
+<!-- BEGIN GENERATED preflight-checks -->
 Before the 11 rows, a separate `ward.cannot_evaluate` preflight denies a file mutation whose
 required path or introduced text is missing, empty, independently unparseable Python, or an
 ambiguous detached security keyword. Malformed input or a shim that cannot start also produces a
 fail-closed denial, as does an internal dispatcher error while a `PreToolUse` check is due to run.
+<!-- END GENERATED preflight-checks -->
 These are wiring/input failures, not extra rows in the `CHECKS` table.
 
 Before any of that, `plugin/ward/wire.py` reads stdin as **bytes** and repairs anything that is not valid
@@ -143,7 +153,7 @@ Two measured defeats of the `ward-allow` mechanism itself, both fixed in
 here because a defeat that lives only in a module docstring persuades nobody who reads the README.
 
 - **A string literal disarmed every other line.** The marker was once regex-scanned over the raw
-  introduced text, so `note = "ward-allow: ..."` on line 1 — a *mention*, not an annotation —
+  introduced text, so `note = "ward-allow: ..."` on the first line — a *mention*, not an annotation —
   exempted every check on every other line. Measured before the fix: a `verify=False` call went
   from DENIED to allowed with one unrelated string added above it, and a comment on a different
   line did the same. After: the marker is tokenized, so only a real Python comment counts, and it
@@ -177,9 +187,10 @@ The full boundary and one named reachable bypass for every row are documented in
 
 ## Siblings
 
-Ward is one of three engines that split one taxonomy — act, sequence, statement — and share
-nothing else. Each installs alone; none inherits or implies the others' coverage. All three
-install from the [Courthouse](https://github.com/Clear-Sights/Courthouse) marketplace:
+Ward implements the act part of the act/sequence/statement taxonomy documented by
+[Courthouse](https://github.com/Clear-Sights/Courthouse), alongside the sequence and statement
+engines. Each installs alone; none inherits or implies the others' coverage. Installation is through
+Courthouse's marketplace:
 `claude plugin marketplace add Clear-Sights/Courthouse`.
 
 | Engine | Judges | One line |
@@ -193,21 +204,28 @@ install from the [Courthouse](https://github.com/Clear-Sights/Courthouse) market
 Run the standard-library suite from the repository root:
 
 ```console
+<!-- BEGIN GENERATED suite-output -->
 $ python3 -m unittest discover -s tests
 ...
-Ran 82 tests in <elapsed>s
+Ran 114 tests in <elapsed>s
 
 OK
+<!-- END GENERATED suite-output -->
 ```
 
+<!-- BEGIN GENERATED replay-summary -->
 Beyond the unit suite, `python3 eval/replay.py` replays recorded sessions through the real
-dispatcher: five derailments (certificate verification disabled, JWT `none` algorithm, paramiko
+dispatcher: 5 derailments (certificate verification disabled, JWT `none` algorithm, paramiko
 auto-add host key, a secret in an outbound URL, a shell-startup write) each denied at the event
 where the session went wrong, and a benign control that stays silent — 6/6, standard library
-only, exit 0 iff every session meets its expectation.
+only.
+<!-- END GENERATED replay-summary -->
+It exits with status 0 iff every session meets its expectation.[^m-replay-exit]
 
-The shipped suite contains 82 tests. Keep new predicates narrow, add both firing and clean cases,
+<!-- BEGIN GENERATED suite-count -->
+The shipped suite contains 114 tests. Keep new predicates narrow, add both firing and clean cases,
 and exercise the shell entrypoint when changing hook wiring.
+<!-- END GENERATED suite-count -->
 
 ## Security and license
 
@@ -216,3 +234,6 @@ licensed under [Apache License 2.0](LICENSE); attribution and porting notes are 
 
 The README structure and local house-style influences are recorded in
 [docs/README-PRIOR-ART.md](docs/README-PRIOR-ART.md).
+
+[^m-dispatch-exit]: The denial smoke event's dispatcher status, measured by `python3 tools/measure.py dispatch-exit`.
+[^m-replay-exit]: The complete corpus replay's status, measured by `python3 tools/measure.py replay-exit`.
