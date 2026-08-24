@@ -20,4 +20,30 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e .
-      - run: python -m unittest discover -s tests
+      - name: Unit suite, with the count as the check
+        run: |
+          # `unittest discover` prints OK and exits 0 when it collects NOTHING, so a bare
+          # `discover` call reports green forever on a suite that stopped being found -- rename
+          # tests/, break an import at module scope, and nothing here would notice. Sibling
+          # repositories are covered against this by accident: their CI plants a fault and
+          # demands the suite go red, which a zero-collection run cannot do. This one had no
+          # such step, so the count is made the check directly.
+          set +e
+          python -m unittest discover -s tests -v 2>&1 | tee /tmp/unittest.log
+          status=${PIPESTATUS[0]}
+          set -e
+          ran=$(sed -n 's/^Ran \([0-9][0-9]*\) test.*/\1/p' /tmp/unittest.log | tail -1)
+          if [ "$status" -ne 0 ]; then
+            echo "Unit suite failed with status $status."
+            exit "$status"
+          fi
+          if [ -z "$ran" ] || [ "$ran" -eq 0 ]; then
+            echo "No tests were collected. Finding nothing is not finding nothing wrong."
+            exit 1
+          fi
+          echo "Unit suite passed: $ran tests ran."
+      - name: Corpus replay through the real dispatcher
+        # The README cites this run as Ward's evidence -- and nothing executed it here, so the
+        # evidence a reader is pointed at was never re-checked after any change. Exits nonzero
+        # unless every recorded session meets its expectation.
+        run: python3 eval/replay.py
