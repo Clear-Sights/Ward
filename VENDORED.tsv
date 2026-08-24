@@ -10,4 +10,4 @@
 # Keel owns note_fault: Keel's journal carries the discharge semantics Ward lacks, so the
 # helper is native there and Ward's copy is the vendored one.
 SYMBOL	LOCAL-PATH	OWNER-REPO	OWNER-PATH	DIGEST	WHY
-note_fault	plugin/ward/journal.py	Keel	plugin/keel/journal.py	2d7644c9afcd4ff0961a755bf470289793bb3444d14455a18dc8a6e375590456	Fault journal helper vendored from Keel
+note_fault	plugin/ward/journal.py	Keel	plugin/keel/journal.py	874dcd28a9e000d099a0f8dc2ce5a491f751f82c8d57b8347c0c3030d8628529	Fault journal helper vendored from Keel
