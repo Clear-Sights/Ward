@@ -47,3 +47,5 @@ jobs:
         # evidence a reader is pointed at was never re-checked after any change. Exits nonzero
         # unless every recorded session meets its expectation.
         run: python3 eval/replay.py
+      - name: README measurements are current
+        run: python3 tools/render_readme_claims.py --check
