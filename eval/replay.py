@@ -59,9 +59,28 @@ def dispatch(event: dict, state_dir: str) -> dict:
     )
     try:
         decision = json.loads(proc.stdout or "{}")
+        parsed = True
     except json.JSONDecodeError:
-        decision = {}
-    return {"decision": decision, "exit": proc.returncode}
+        decision, parsed = {}, False
+    return {"decision": decision, "exit": proc.returncode, "parsed": parsed,
+            "stderr": proc.stderr[-400:]}
+
+
+def crashed(result: dict) -> str | None:
+    """Why this dispatch did not render a decision, or None if it rendered one.
+
+    SILENCE AND A CRASH ARE THE SAME BYTES TO `fired`, AND THEY ARE NOT THE SAME EVENT. A hook
+    that dies prints nothing, so `fired` returns None -- exactly as it does for an allow -- and a
+    control session read "silent on every event -- OK" over a dispatcher that never ran a check.
+    A corpus whose whole job is to show the table firing was counting its own failure to run as
+    evidence of correct quiet. Ward's dispatcher exits 0 on allow AND on deny, so a non-zero exit
+    is never normal here, and unparseable stdout is never a decision.
+    """
+    if result["exit"] != 0:
+        return f"the dispatcher exited {result['exit']}: {result['stderr'].strip()!r}"
+    if not result["parsed"]:
+        return "the dispatcher printed something that is not JSON, so it rendered no decision"
+    return None
 
 
 _RULE_IN_REASON = re.compile(r"\b(ward\.[a-z0-9_]+)\b")
@@ -96,6 +115,21 @@ def replay(path: pathlib.Path) -> bool:
     first = next((i for i, reason in enumerate(reasons) if reason), None)
 
     print(f"\n== {path.stem}: {header['description']}")
+
+    # A SESSION WITH NO EVENTS EVALUATED NOTHING and used to pass: `results` empty makes `first`
+    # None, which a control session read as correct silence, and the file still counted toward
+    # `sessions` and `passed`. An empty denominator is not a clean one.
+    if not events:
+        print("   FAIL: this session carries no events, so it is evidence about nothing")
+        return False
+
+    # A CRASH IS NOT SILENCE. Checked before anything reads `reasons`, so no later branch can
+    # interpret a dead hook as an allow.
+    faults = [(i, why) for i, why in ((i, crashed(r)) for i, r in enumerate(results)) if why]
+    if faults:
+        for index, why in faults:
+            print(f"   FAIL: event [{index}] rendered no decision -- {why}")
+        return False
     if expect == "none":
         ok = first is None
         print("   control session: " + ("silent on every event — OK"
