@@ -62,11 +62,27 @@ jobs:
           cp -r plugin/ward plugin/hooks plugin/.claude-plugin \
              pyproject.toml LICENSE NOTICE README.md SECURITY.md "$STAGE"/
           zip -qr "ward-$VERSION.zip" "$STAGE"
-          unzip -l "ward-$VERSION.zip" | grep -q "eval/" && exit 1 || true
+          # THE LISTING IS READ ONCE, AND ITS OWN EXIT CODE IS CHECKED. Piping `unzip -l`
+          # straight into `grep -q` hides a failed unzip: without pipefail the pipeline's status
+          # is grep's, an unreadable or corrupt archive gives grep no input, grep returns 1, and
+          # `&& exit 1 || true` turns that into SUCCESS -- the same verdict as "inspected and
+          # contains no eval/". Verified by running it: a listing of a nonexistent archive exits
+          # the gate 0. An archive that cannot be read has not been inspected.
+          if ! LISTING=$(unzip -l "ward-$VERSION.zip"); then
+            echo "could not list ward-$VERSION.zip; the bundle was not inspected"
+            exit 1
+          fi
+          if printf '%s' "$LISTING" | grep -q "eval/"; then
+            echo "the install bundle contains eval/"
+            exit 1
+          fi
           # Asserted, not assumed. The bundle copies plugin/ contents, so a test file can only
           # appear here if the suite moved back inside the installed subtree -- which is the
           # thing this layout exists to prevent, and it would look correct from the outside.
-          unzip -l "ward-$VERSION.zip" | grep -q "tests/" && exit 1 || true
+          if printf '%s' "$LISTING" | grep -q "tests/"; then
+            echo "the install bundle contains tests/"
+            exit 1
+          fi
 
       - name: Create tag and GitHub Release
         env:

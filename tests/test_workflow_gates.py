@@ -35,6 +35,32 @@ _DECIDES_ON_COUNT = re.compile(
 
 
 
+
+def _without_shell_comments(script: str) -> str:
+    """`script` with `#` comments removed, so a search sees only commands.
+
+    Not a full shell parser: a `#` inside single or double quotes is respected, which is what
+    separates a comment from a literal here, but `$'...'` and here-documents are not tracked.
+    The direction of any error is toward keeping MORE text, so a mistake makes this law more
+    permissive rather than falsely accusing -- stated because that is the wrong direction for a
+    law and is the reason `test_the_step_scan_finds_the_steps` exists beside it.
+    """
+    out = []
+    for line in script.splitlines():
+        quote, cut = None, None
+        for index, char in enumerate(line):
+            if quote:
+                if char == quote:
+                    quote = None
+            elif char in "'\"":
+                quote = char
+            elif char == "#":
+                cut = index
+                break
+        out.append(line if cut is None else line[:cut])
+    return "\n".join(out)
+
+
 def _run_steps(path: Path) -> list:
     """[(label, shell script)] for each workflow step that has a `run:` block.
 
@@ -103,6 +129,11 @@ class EveryWorkflowThatRunsTheSuiteReadsItsCount(unittest.TestCase):
                     if any(" -v" not in line for line in invocations):
                         offenders.append(f"{name} (discover without -v: no 'Ran N' line to read)")
                         continue
+                    # Shell COMMENTS are not shell. Both workflows explain this very defect in
+                    # a comment beside the guard, and those comments contain the fragments this
+                    # law looks for -- so a step could carry the explanation, run the suite
+                    # bare, and satisfy every assertion below. Strip them first.
+                    script = _without_shell_comments(script)
                     if _EXTRACTS_COUNT not in script:
                         offenders.append(f"{name} (never extracts the 'Ran N' count in the step "
                                          f"that runs the suite)")
