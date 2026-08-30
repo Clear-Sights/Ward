@@ -25,7 +25,7 @@ Ward sits before the act: the call is denied with a citation and a retry hint be
 <!-- BEGIN GENERATED quickstart-checks -->
 Ward is a Claude Code `PreToolUse` plugin: an ordered 11-row table of exact denials over the
 pending tool call. A match denies with a citation and a retry hint; anything else is a silent
-`{}`. No state, no history, no configuration.
+`{}`. No state, no history, and nothing configurable about what it denies.
 <!-- END GENERATED quickstart-checks -->
 
 Ward requires Python 3.11 or newer and has no Python package dependencies. From a local checkout:
@@ -39,7 +39,10 @@ The marketplace entry in [.claude-plugin/marketplace.json](.claude-plugin/market
 the plugin metadata in [plugin/.claude-plugin/plugin.json](plugin/.claude-plugin/plugin.json). Enabling it loads
 [plugin/hooks/hooks.json](plugin/hooks/hooks.json), which sends every `PreToolUse` event through the single
 [plugin/hooks/dispatch.sh](plugin/hooks/dispatch.sh) entrypoint. The shim pins execution to the plugin root and
-runs `python3 -m ward.dispatch`; there is no separate package-install step for the hook.
+runs `python3 -m ward.dispatch`; there is no separate package-install step for the hook. On a host
+where the interpreter is not called `python3`, set `WARD_PYTHON` to its path — one executable, no
+arguments. That names the interpreter and nothing else: an override pointing at a missing or
+broken interpreter still denies, so it cannot be used to turn Ward off.
 
 To exercise that same bridge without modifying a file:
 
@@ -209,7 +212,7 @@ Run the standard-library suite from the repository root:
 <!-- BEGIN GENERATED suite-output -->
 $ python3 -m unittest discover -s tests
 ...
-Ran 126 tests in <elapsed>s
+Ran 128 tests in <elapsed>s
 
 OK
 <!-- END GENERATED suite-output -->
@@ -237,7 +240,7 @@ and a benign control that stays silent — 12/12, standard library only.
 It exits with status 0 iff every session meets its expectation.[^m-replay-exit]
 
 <!-- BEGIN GENERATED suite-count -->
-The shipped suite contains 126 tests. Keep new predicates narrow, add both firing and clean cases,
+The shipped suite contains 128 tests. Keep new predicates narrow, add both firing and clean cases,
 and exercise the shell entrypoint when changing hook wiring.
 <!-- END GENERATED suite-count -->
 

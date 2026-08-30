@@ -40,7 +40,7 @@ def generated() -> dict[str, str]:
         "quickstart-checks":
             f"Ward is a Claude Code `PreToolUse` plugin: an ordered {rows}-row table of exact denials over the\n"
             "pending tool call. A match denies with a citation and a retry hint; anything else is a silent\n"
-            "`{}`. No state, no history, no configuration.",
+            "`{}`. No state, no history, and nothing configurable about what it denies.",
         "checks-heading":
             f"The ordered `CHECKS` table in [plugin/ward/checks.py](plugin/ward/checks.py) contains these {rows} rows. The first\n"
             "matching row wins.",
