@@ -101,6 +101,64 @@ def _run_steps(path: Path) -> list:
     return steps
 
 
+
+class NoWorkflowPublishesANumberItDidNotMeasure(unittest.TestCase):
+    """A release note stating a count must take it from the run, not from a literal.
+
+    Ward's release notes said "the 82-test suite and the 6/6 corpus replay" for as long as those
+    numbers were true, and went on saying it after the suite passed 130 tests and the corpus
+    reached 13 sessions. Every release published two false statements about the verification it
+    had just performed -- and the workflow HAD both numbers, in steps it ran seconds earlier.
+
+    A count in a published string must therefore be an expression, not a digit. This reads the
+    strings a workflow publishes and requires any suite/replay figure in them to come from a step
+    output.
+    """
+
+    # Phrases that state a measured quantity about this repository, as (regex, what it counts).
+    # A counted token is either a `${{ ... }}` expression or a bare word. The expression form
+    # has to be matched WHOLE: a plain `\S+` stops at the spaces inside `${{ steps.x.outputs.y }}`
+    # and captures `}}`, which then looks like a literal and makes this law fire on its own fix.
+    _TOKEN = r"(\$\{\{[^}]*\}\}|\S+)"
+    COUNTED = (
+        (re.compile(_TOKEN + r"-test suite"), "the suite size"),
+        (re.compile(_TOKEN + r"/" + _TOKEN + r" corpus replay"), "the corpus replay denominator"),
+    )
+    FROM_A_STEP = re.compile(r"\$\{\{\s*steps\.[\w-]+\.outputs\.[\w-]+\s*\}\}")
+
+    def test_the_check_has_a_subject(self) -> None:
+        # Comments stripped first: the step that carries this defect's explanation quotes the
+        # old literal "82-test suite" while describing it, and a law that matched its own
+        # explanation would fire on the fix.
+        published = [text for path in sorted(WORKFLOWS.glob("*.yml"))
+                     for _label, raw in _run_steps(path)
+                     for text in [_without_shell_comments(raw)]
+                     if any(pattern.search(text) for pattern, _what in self.COUNTED)]
+        self.assertTrue(
+            published,
+            "no workflow step publishes a suite or replay count, so this law compares nothing. "
+            "If the release notes stopped stating them, delete this test rather than leaving it "
+            "green over nothing.")
+
+    def test_every_published_count_is_read_from_a_step_output(self) -> None:
+        offenders = []
+        for path in sorted(WORKFLOWS.glob("*.yml")):
+            for label, raw in _run_steps(path):
+                text = _without_shell_comments(raw)
+                for pattern, what in self.COUNTED:
+                    for found in pattern.finditer(text):
+                        for group in found.groups():
+                            if not self.FROM_A_STEP.search(group):
+                                offenders.append(
+                                    f"{label}: publishes {what} as the literal {group!r} in "
+                                    f"{found.group(0)!r}")
+        self.assertEqual(
+            [], offenders,
+            "a workflow publishes a measured count as a literal. It goes stale the moment the "
+            "thing it counts changes, and the workflow already has the real number from the step "
+            "that produced it: " + "; ".join(offenders))
+
+
 class EveryWorkflowThatRunsTheSuiteReadsItsCount(unittest.TestCase):
     def test_the_check_has_a_subject(self) -> None:
         files = sorted(WORKFLOWS.glob("*.yml"))
