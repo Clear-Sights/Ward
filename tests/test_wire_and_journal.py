@@ -45,11 +45,18 @@ VIOLATION_PY_WITH_BAD_BYTE = (
 )
 
 
-def _run(raw: bytes, state_dir) -> tuple:
+def _raw(raw: bytes, state_dir):
+    """The dispatcher's completed process, undecoded. A test that asks what the dispatcher SAID
+    -- rather than what its parsed payload contains -- must read the bytes, because a payload
+    that parses to `{}` has already thrown away every wording it might have carried."""
     env = os.environ.copy()
     env["WARD_STATE_DIR"] = str(state_dir)
-    proc = subprocess.run([sys.executable, "-m", "ward.dispatch"], input=raw,
+    return subprocess.run([sys.executable, "-m", "ward.dispatch"], input=raw,
                           capture_output=True, env=env, cwd=str(PLUGIN_ROOT))
+
+
+def _run(raw: bytes, state_dir) -> tuple:
+    proc = _raw(raw, state_dir)
     return proc.returncode, json.loads(proc.stdout.decode() or "{}")
 
 
@@ -83,11 +90,22 @@ class TestTheFalseDeny(StateCase):
                          "a valid Python file must not be denied over one stray byte: %r" % (body,))
 
     def test_the_old_reason_is_specifically_gone(self):
-        """Pin the false reason itself, not merely 'did not deny'. A future change that reintroduces
-        the deny under any wording should fail here with the wording named."""
-        _code, body = _run(BENIGN_PY_WITH_BAD_BYTE, self.state)
-        self.assertEqual(body, {}, "a silent or altered allow payload cannot satisfy a wording-only check")
-        self.assertNotIn("cannot be parsed independently", _reason(body))
+        """Pin the false reason itself, not merely 'did not deny'. A future change that
+        reintroduces the deny under any wording must fail here with the wording named.
+
+        This used to assert `body == {}` first and then `"cannot be parsed independently" not in
+        _reason(body)`. The second assertion could not fail: `_reason({})` is `""` by
+        construction, so once the equality passed the wording check was reading a string it had
+        just guaranteed to be empty. It was the previous test over again, wearing a different
+        docstring -- and the wording it claims to pin was pinned by nothing.
+
+        The wording is now looked for in the RAW decision bytes, with no precondition on the
+        shape of the payload. A future change that denies this file -- with an empty body, a
+        differently-shaped payload, or a reason nested somewhere new -- reaches this assertion
+        instead of being excluded before it."""
+        proc = _raw(BENIGN_PY_WITH_BAD_BYTE, self.state)
+        self.assertNotIn(b"cannot be parsed independently", proc.stdout + proc.stderr,
+                         "the false reason is back: %r" % ((proc.stdout + proc.stderr)[-400:],))
 
     def test_real_violation_with_a_bad_byte_still_denies(self):
         """The repair must not blunt the gate. Same stray byte, real weakened-TLS mutation."""

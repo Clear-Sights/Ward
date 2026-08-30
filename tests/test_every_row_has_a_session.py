@@ -14,6 +14,10 @@ and this law is what makes the set of them a denominator rather than a sample.
 from __future__ import annotations
 
 import json
+import os
+import re
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -80,6 +84,39 @@ class EveryRowIsDrivenEndToEnd(unittest.TestCase):
             missing,
             f"these denials are never driven through the real entrypoint: {missing}. Add a "
             f"session to eval/corpus declaring one.")
+
+    def test_the_corpus_is_actually_driven_and_every_session_passes(self) -> None:
+        """The two laws above are about DECLARATIONS. On their own they do not drive anything.
+
+        This module's own docstring says every row is "driven end to end", and the driving is
+        `eval/replay.py`: it dispatches each session's events through the real entrypoint and
+        requires the FIRST fire to name the rule the session's header declares -- which is what
+        turns a corpus file into evidence about one row rather than evidence that the table fires
+        at all. But nothing here made that happen. The declarations could be perfect while the
+        replay was broken, removed from CI, or passing zero sessions, and these tests would stay
+        green while the docstring above went on claiming end-to-end coverage.
+
+        So the replay is run here, from this file, and its own denominator is read: exit code 0,
+        `failed=0`, and `sessions` equal to the number of corpus files, so a replay that silently
+        stopped collecting most of them cannot satisfy this either. Absence is not a pass."""
+        corpus = sorted(CORPUS.glob("*.jsonl"))
+        self.assertTrue(corpus, "no corpus sessions, so nothing below is being driven")
+        done = subprocess.run(
+            [sys.executable, "eval/replay.py"], cwd=REPO, capture_output=True, text=True,
+            env={**os.environ, "PYTHONPATH": "plugin"}, timeout=600)
+        self.assertEqual(0, done.returncode,
+                         f"eval/replay.py exited {done.returncode}; the corpus is not being "
+                         f"driven clean:\n{done.stdout[-2000:]}\n{done.stderr[-2000:]}")
+        found = re.search(r"REPLAY sessions=(\d+) passed=(\d+) failed=(\d+)", done.stdout)
+        self.assertIsNotNone(
+            found, f"eval/replay.py printed no denominator, so its exit code stands on "
+                   f"nothing:\n{done.stdout[-2000:]}")
+        sessions, passed, failed = (int(g) for g in found.groups())
+        self.assertEqual(0, failed, done.stdout[-2000:])
+        self.assertEqual(len(corpus), sessions,
+                         f"eval/corpus holds {len(corpus)} sessions and the replay drove "
+                         f"{sessions}; a session that is never replayed is evidence about nothing")
+        self.assertEqual(sessions, passed, done.stdout[-2000:])
 
     def test_the_check_can_fail(self) -> None:
         """Planted: a row absent from the corpus must be reported by name."""
