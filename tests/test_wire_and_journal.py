@@ -179,11 +179,34 @@ class TestTheRecord(StateCase):
         self.assertEqual([r for r in rows if r["kind"] == "fault"], [])
 
     def test_fault_rows_record_which_way_ward_fell(self):
-        """`failed_closed` makes the suite's fail-direction policy auditable, not merely documented."""
-        _run(b"not json{{{", self.state)
+        """`failed_closed` makes the fail-direction auditable -- against the DENIAL, not alone.
+
+        This asserted only that the journal row carries `failed_closed is True`, discarding
+        `_run`'s return code and response body. Production writes that flag beside emitting the
+        denial, so the row said "closed" whether or not a denial actually reached the host: a
+        dispatcher that recorded the flag and then allowed the call would have passed. The field
+        is a claim about behaviour and the behaviour was not read.
+
+        The row and the response are now required to agree. `failed_closed is True` means the
+        host was told to DENY, so the payload is checked for that deny, and the two are asserted
+        together rather than the record being trusted on its own.
+        """
+        code, body = _run(b"not json{{{", self.state)
         faults = [r for r in _rows(self.state) if r["kind"] == "fault"]
         self.assertEqual(len(faults), 1)
         self.assertIs(faults[0]["failed_closed"], True)
+        # ...and the call it describes was actually denied.
+        self.assertEqual(0, code, "the dispatcher must render a decision, not crash")
+        hook = body.get("hookSpecificOutput") or {}
+        self.assertEqual(
+            "deny", hook.get("permissionDecision"),
+            f"the journal recorded failed_closed=True and the host was told "
+            f"{hook.get('permissionDecision')!r}. A fail-CLOSED row beside an allow is the "
+            f"record contradicting the behaviour it claims to audit: {body!r}")
+        self.assertIn(
+            "failing closed", _reason(body),
+            f"the row records failed_closed=True and the denial does not say it fell that way; "
+            f"the record and the message a user reads must agree: {_reason(body)!r}")
 
     def test_a_clean_call_writes_no_deny_row(self):
         """Fires-only, by design: a row per allowed call runs 99%+ noise and drowns the signal."""

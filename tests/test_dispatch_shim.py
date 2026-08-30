@@ -81,7 +81,28 @@ class Shim(unittest.TestCase):
         self.tmp_path = Path(scratch.name)
 
     def test_shim_is_executable(self):
-        _ck(os.access(SHIM, os.X_OK), "hooks/dispatch.sh must carry the executable bit in git")
+        """The bit GIT records, not the one this checkout happens to have.
+
+        `os.access(SHIM, os.X_OK)` reads the working tree, while the message beside it said "in
+        git" -- and git's mode is what ships. A local `chmod +x` made this pass over an index
+        recording 100644, and a restrictive checkout could fail it over an index that is
+        correct. Neither answer was about the thing being claimed.
+
+        Both are checked now: the index mode, which is what an installing user receives, and the
+        working tree, because a shim that is not executable HERE cannot be run by the tests below.
+        """
+        done = subprocess.run(["git", "ls-files", "-s", "--", str(SHIM.relative_to(REPO))],
+                              cwd=REPO, capture_output=True, text=True, timeout=60)
+        _ck(done.returncode == 0 and done.stdout.strip(),
+            f"git does not track {SHIM}; its recorded mode cannot be read, and absence is not "
+            f"a pass")
+        mode = done.stdout.split()[0]
+        _ck(mode == "100755",
+            f"git records mode {mode} for hooks/dispatch.sh; it must be 100755, because that is "
+            f"the bit an installing user receives. A local chmod does not change it.")
+        _ck(os.access(SHIM, os.X_OK),
+            "hooks/dispatch.sh is not executable in this checkout, so the shim tests below "
+            "cannot run it")
 
     def test_hook_uses_exec_form_for_plugin_path(self):
         config = json.loads(HOOKS.read_text())
