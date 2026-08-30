@@ -153,3 +153,59 @@ class EveryRowIsDrivenEndToEnd(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheReplaySummaryPublishesTheRightPartition(unittest.TestCase):
+    """README's derailment count is split the way this file's law splits it.
+
+    The generated sentence read "12 derailments — one for every row of the table" while the
+    table has eleven rows: the twelfth session derails on the `ward.cannot_evaluate`
+    preflight, which `PREFLIGHT_DENIALS` above records as deliberately NOT a row. Numerator
+    and denominator were gathered by different rules, so nothing checked that they agreed
+    and the sentence could not go stale when it stopped being true.
+
+    `measure.derailment_partition()` now derives both halves from one pass over the corpus
+    and refuses when the tabled half is not exactly one session per row.
+    """
+
+    def _measure(self):
+        sys.path.insert(0, str(REPO / "tools"))
+        try:
+            import measure
+            return measure
+        finally:
+            sys.path.remove(str(REPO / "tools"))
+
+    def test_the_partition_is_the_one_this_file_declares(self) -> None:
+        measure = self._measure()
+        tabled, off_table = measure.derailment_partition()
+        self.assertEqual(len(CHECKS), tabled)
+        self.assertEqual(sorted(PREFLIGHT_DENIALS), off_table)
+
+    def test_a_corpus_that_stops_covering_a_row_is_refused(self) -> None:
+        """PLANT: drop one row's session. The old sentence just said 11 and went on
+        claiming one per row; here the partition names the row that lost its session."""
+        measure = self._measure()
+        full = measure.derailment_rules
+        dropped = next(rule for rule in full()
+                       if f"ward.{rule}" not in PREFLIGHT_DENIALS)
+        measure.derailment_rules = lambda: [r for r in full() if r != dropped]
+        try:
+            with self.assertRaises(RuntimeError) as caught:
+                measure.derailment_partition()
+            self.assertIn(f"ward.{dropped}", str(caught.exception))
+        finally:
+            measure.derailment_rules = full
+
+    def test_an_off_table_denial_is_not_counted_as_a_row(self) -> None:
+        """CONTROL for the plant above: a session derailing on something outside CHECKS
+        lands in the off-table half, and does not inflate the per-row count."""
+        measure = self._measure()
+        full = measure.derailment_rules
+        measure.derailment_rules = lambda: [*full(), "not_a_row_at_all"]
+        try:
+            tabled, off_table = measure.derailment_partition()
+            self.assertEqual(len(CHECKS), tabled)
+            self.assertIn("ward.not_a_row_at_all", off_table)
+        finally:
+            measure.derailment_rules = full

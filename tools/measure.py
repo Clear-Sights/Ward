@@ -90,6 +90,33 @@ def corpus_counts() -> tuple[int, int]:
     return len(paths), derailments
 
 
+def derailment_partition() -> tuple[int, list[str]]:
+    """Split the corpus's derailing sessions into the table rows and everything else.
+
+    README's replay summary read "12 derailments -- one for every row of the table" while
+    `CHECKS` has eleven rows: the twelfth session derails on the `ward.cannot_evaluate`
+    preflight, which is deliberately not a row. Numerator and denominator were gathered by
+    different rules, so nothing checked that they agreed and the sentence went on claiming
+    a ratio that had stopped holding. Both halves come from one pass over the corpus here.
+
+    Raises when the tabled half is not exactly one session per row, naming the rows the
+    corpus no longer covers -- which is the condition the summary asserts.
+
+    `checks()` names carry the `ward.` prefix; `derailment_rules()` names do not.
+    """
+    table = {name for name, *_ in checks()}
+    derailing = [f"ward.{rule}" for rule in derailment_rules()]
+    tabled = sorted(rule for rule in derailing if rule in table)
+    if set(tabled) != table:
+        raise RuntimeError(
+            f"the corpus derails on {len(set(tabled))} of the {len(table)} table rows; the "
+            f"replay summary claims one session per row. Missing: {sorted(table - set(tabled))}")
+    if len(tabled) != len(table):
+        raise RuntimeError(
+            f"{len(tabled)} derailing sessions cover {len(table)} rows; a row is named twice")
+    return len(tabled), sorted(set(derailing) - table)
+
+
 def derailment_rules() -> list[str]:
     """The rule each derailing session declares, in corpus order.
 
