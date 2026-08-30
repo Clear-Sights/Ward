@@ -9,7 +9,7 @@ import re
 import subprocess
 import sys
 
-from measure import check_count, contiguous_count, corpus_counts, suite_count
+from measure import derailment_rules, check_count, contiguous_count, corpus_counts, suite_count
 
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -65,10 +65,10 @@ def generated() -> dict[str, str]:
             "OK",
         "replay-summary":
             "Beyond the unit suite, `python3 eval/replay.py` replays recorded sessions through the real\n"
-            f"dispatcher: {derailments} derailments (certificate verification disabled, JWT `none` algorithm, paramiko\n"
-            "auto-add host key, a secret in an outbound URL, a shell-startup write) each denied at the event\n"
-            f"where the session went wrong, and a benign control that stays silent — {passed}/{executed}, standard library\n"
-            "only.",
+            f"dispatcher: {derailments} derailments — one for every row of the table — each denied at the\n"
+            "event where the session went wrong, and by the row that names it:\n\n"
+            + "".join(f"  - `ward.{rule}`\n" for rule in derailment_rules())
+            + f"\nand a benign control that stays silent — {passed}/{executed}, standard library only.",
         "suite-count":
             f"The shipped suite contains {tests} tests. Keep new predicates narrow, add both firing and clean cases,\n"
             "and exercise the shell entrypoint when changing hook wiring.",

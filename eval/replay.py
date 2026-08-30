@@ -28,6 +28,7 @@ Exit 0 iff every session meets its expectation. Python standard library only.
 from __future__ import annotations
 
 import json
+import re
 import os
 import pathlib
 import subprocess
@@ -55,6 +56,14 @@ def dispatch(event: dict, state_dir: str) -> dict:
     except json.JSONDecodeError:
         decision = {}
     return {"decision": decision, "exit": proc.returncode}
+
+
+_RULE_IN_REASON = re.compile(r"\b(ward\.[a-z0-9_]+)\b")
+
+
+def rules_named(reason: str | None) -> list[str]:
+    """The rule ids a denial names. A fire nobody can attribute is a fire about nothing."""
+    return _RULE_IN_REASON.findall(reason or "")
 
 
 def fired(result: dict) -> str | None:
@@ -94,6 +103,24 @@ def replay(path: pathlib.Path) -> bool:
         return False
     print(f"   first fire at event [{first}]: {reasons[first]}")
     ok = first <= derails_at
+
+    # A SESSION MUST NAME THE RULE IT EXERCISES, AND THE FIRE MUST BE THAT RULE.
+    #
+    # This table is ORDERED and first-match-wins, which is what makes the omission expensive:
+    # an earlier row shadowing a later one is invisible to a check that only asks whether
+    # SOMETHING denied in time. A session named for one rule passed on a denial from any other,
+    # so a corpus file was evidence that the table fires -- never evidence about the row in its
+    # filename, and never evidence that the row it names is still reachable at all.
+    declared = header.get("rule")
+    if not declared:
+        print("   FAIL: the header names no rule, so this session is evidence about nothing")
+        return False
+    named = rules_named(reasons[first])
+    if declared not in named:
+        print(f"   FAIL: declared rule {declared} did not fire; the first fire names "
+              f"{named or 'no rule at all'} -- an earlier row is shadowing it")
+        return False
+    print(f"   the fire is {declared}, which is the rule this session declares")
     print("   fires at or before the derailment — OK" if ok
           else "   FAIL: first fire comes after the derailing event")
 

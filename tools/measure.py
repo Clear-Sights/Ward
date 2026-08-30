@@ -50,6 +50,22 @@ def corpus_counts() -> tuple[int, int]:
     return len(paths), derailments
 
 
+def derailment_rules() -> list[str]:
+    """The rule each derailing session declares, in corpus order.
+
+    The README's enumeration used to be a hand-written list of five beside a count that was
+    computed. Six sessions were added and the sentence read "11 derailments" and then named five
+    of them, which is a claim disagreeing with itself inside one generated block. A list derived
+    from the corpus cannot drift from the count derived from the same corpus.
+    """
+    rules = []
+    for path in sorted((ROOT / "eval" / "corpus").glob("*.jsonl")):
+        header = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
+        if header.get("expect", "fires") != "none" and header.get("rule"):
+            rules.append(header["rule"].removeprefix("ward."))
+    return rules
+
+
 def run(command: list[str], *, cwd: pathlib.Path = ROOT, input_text: str | None = None) -> int:
     return subprocess.run(command, cwd=cwd, input=input_text, text=True,
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode

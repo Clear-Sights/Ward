@@ -209,7 +209,7 @@ Run the standard-library suite from the repository root:
 <!-- BEGIN GENERATED suite-output -->
 $ python3 -m unittest discover -s tests
 ...
-Ran 123 tests in <elapsed>s
+Ran 126 tests in <elapsed>s
 
 OK
 <!-- END GENERATED suite-output -->
@@ -217,15 +217,27 @@ OK
 
 <!-- BEGIN GENERATED replay-summary -->
 Beyond the unit suite, `python3 eval/replay.py` replays recorded sessions through the real
-dispatcher: 5 derailments (certificate verification disabled, JWT `none` algorithm, paramiko
-auto-add host key, a secret in an outbound URL, a shell-startup write) each denied at the event
-where the session went wrong, and a benign control that stays silent — 6/6, standard library
-only.
+dispatcher: 11 derailments — one for every row of the table — each denied at the
+event where the session went wrong, and by the row that names it:
+
+  - `ward.cert_none_mode`
+  - `ward.cert_reqs_none`
+  - `ward.cert_verify_disabled`
+  - `ward.integrity_suppression_flag`
+  - `ward.jwt_none_alg`
+  - `ward.jwt_signature_disabled`
+  - `ward.outbound_secret_pattern`
+  - `ward.paramiko_host_key_weakened`
+  - `ward.self_mute_guard`
+  - `ward.forbidden_location`
+  - `ward.timing_unsafe_compare`
+
+and a benign control that stays silent — 12/12, standard library only.
 <!-- END GENERATED replay-summary -->
 It exits with status 0 iff every session meets its expectation.[^m-replay-exit]
 
 <!-- BEGIN GENERATED suite-count -->
-The shipped suite contains 123 tests. Keep new predicates narrow, add both firing and clean cases,
+The shipped suite contains 126 tests. Keep new predicates narrow, add both firing and clean cases,
 and exercise the shell entrypoint when changing hook wiring.
 <!-- END GENERATED suite-count -->
 
