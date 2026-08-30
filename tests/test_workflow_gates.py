@@ -24,7 +24,14 @@ WORKFLOWS = Path(__file__).resolve().parent.parent / ".github" / "workflows"
 # on it. Any spelling that captures that number and compares it satisfies this; the two markers
 # below are what such a step must contain to be doing it at all.
 _RUNS_SUITE = re.compile(r"unittest\s+discover")
-_READS_COUNT = "s/^Ran "  # the sed that extracts unittest's own "Ran N tests" line
+# Extracting the count is not enough: the value has to DECIDE something. A workflow that pulls
+# "Ran N" into a variable and never tests it is exactly as blind as one that never pulled it, and
+# the earlier version of this law accepted the sed alone -- so a dead assignment, or that literal
+# sitting in a comment, kept it green. Both halves are required now.
+_EXTRACTS_COUNT = "s/^Ran "        # the sed that reads unittest's own "Ran N tests" line
+_DECIDES_ON_COUNT = re.compile(
+    r"""\[\s*["']?\$\{?ran\}?["']?\s*(?:-eq|-lt|-le|=)\s*["']?0["']?\s*\]"""
+    r"""|\[\s*-z\s*["']?\$\{?ran\}?["']?\s*\]""")
 
 
 class EveryWorkflowThatRunsTheSuiteReadsItsCount(unittest.TestCase):
@@ -40,8 +47,13 @@ class EveryWorkflowThatRunsTheSuiteReadsItsCount(unittest.TestCase):
             text = path.read_text()
             if not _RUNS_SUITE.search(text):
                 continue
-            if _READS_COUNT not in text:
-                offenders.append(path.name)
+            if _EXTRACTS_COUNT not in text:
+                offenders.append(f"{path.name} (never extracts the 'Ran N' count)")
+                continue
+            if not _DECIDES_ON_COUNT.search(text):
+                offenders.append(
+                    f"{path.name} (extracts the count and never tests it: a value nothing "
+                    f"branches on is a value nothing checks)")
                 continue
             # The count can only be read if `discover` was asked to print it. Checked on the
             # INVOKING lines -- those that actually run an interpreter -- because both files
