@@ -45,11 +45,18 @@ VIOLATION_PY_WITH_BAD_BYTE = (
 )
 
 
-def _run(raw: bytes, state_dir) -> tuple:
+def _raw(raw: bytes, state_dir):
+    """The dispatcher's completed process, undecoded. A test that asks what the dispatcher SAID
+    -- rather than what its parsed payload contains -- must read the bytes, because a payload
+    that parses to `{}` has already thrown away every wording it might have carried."""
     env = os.environ.copy()
     env["WARD_STATE_DIR"] = str(state_dir)
-    proc = subprocess.run([sys.executable, "-m", "ward.dispatch"], input=raw,
+    return subprocess.run([sys.executable, "-m", "ward.dispatch"], input=raw,
                           capture_output=True, env=env, cwd=str(PLUGIN_ROOT))
+
+
+def _run(raw: bytes, state_dir) -> tuple:
+    proc = _raw(raw, state_dir)
     return proc.returncode, json.loads(proc.stdout.decode() or "{}")
 
 
@@ -83,11 +90,22 @@ class TestTheFalseDeny(StateCase):
                          "a valid Python file must not be denied over one stray byte: %r" % (body,))
 
     def test_the_old_reason_is_specifically_gone(self):
-        """Pin the false reason itself, not merely 'did not deny'. A future change that reintroduces
-        the deny under any wording should fail here with the wording named."""
-        _code, body = _run(BENIGN_PY_WITH_BAD_BYTE, self.state)
-        self.assertEqual(body, {}, "a silent or altered allow payload cannot satisfy a wording-only check")
-        self.assertNotIn("cannot be parsed independently", _reason(body))
+        """Pin the false reason itself, not merely 'did not deny'. A future change that
+        reintroduces the deny under any wording must fail here with the wording named.
+
+        This used to assert `body == {}` first and then `"cannot be parsed independently" not in
+        _reason(body)`. The second assertion could not fail: `_reason({})` is `""` by
+        construction, so once the equality passed the wording check was reading a string it had
+        just guaranteed to be empty. It was the previous test over again, wearing a different
+        docstring -- and the wording it claims to pin was pinned by nothing.
+
+        The wording is now looked for in the RAW decision bytes, with no precondition on the
+        shape of the payload. A future change that denies this file -- with an empty body, a
+        differently-shaped payload, or a reason nested somewhere new -- reaches this assertion
+        instead of being excluded before it."""
+        proc = _raw(BENIGN_PY_WITH_BAD_BYTE, self.state)
+        self.assertNotIn(b"cannot be parsed independently", proc.stdout + proc.stderr,
+                         "the false reason is back: %r" % ((proc.stdout + proc.stderr)[-400:],))
 
     def test_real_violation_with_a_bad_byte_still_denies(self):
         """The repair must not blunt the gate. Same stray byte, real weakened-TLS mutation."""
@@ -161,11 +179,34 @@ class TestTheRecord(StateCase):
         self.assertEqual([r for r in rows if r["kind"] == "fault"], [])
 
     def test_fault_rows_record_which_way_ward_fell(self):
-        """`failed_closed` makes the suite's fail-direction policy auditable, not merely documented."""
-        _run(b"not json{{{", self.state)
+        """`failed_closed` makes the fail-direction auditable -- against the DENIAL, not alone.
+
+        This asserted only that the journal row carries `failed_closed is True`, discarding
+        `_run`'s return code and response body. Production writes that flag beside emitting the
+        denial, so the row said "closed" whether or not a denial actually reached the host: a
+        dispatcher that recorded the flag and then allowed the call would have passed. The field
+        is a claim about behaviour and the behaviour was not read.
+
+        The row and the response are now required to agree. `failed_closed is True` means the
+        host was told to DENY, so the payload is checked for that deny, and the two are asserted
+        together rather than the record being trusted on its own.
+        """
+        code, body = _run(b"not json{{{", self.state)
         faults = [r for r in _rows(self.state) if r["kind"] == "fault"]
         self.assertEqual(len(faults), 1)
         self.assertIs(faults[0]["failed_closed"], True)
+        # ...and the call it describes was actually denied.
+        self.assertEqual(0, code, "the dispatcher must render a decision, not crash")
+        hook = body.get("hookSpecificOutput") or {}
+        self.assertEqual(
+            "deny", hook.get("permissionDecision"),
+            f"the journal recorded failed_closed=True and the host was told "
+            f"{hook.get('permissionDecision')!r}. A fail-CLOSED row beside an allow is the "
+            f"record contradicting the behaviour it claims to audit: {body!r}")
+        self.assertIn(
+            "failing closed", _reason(body),
+            f"the row records failed_closed=True and the denial does not say it fell that way; "
+            f"the record and the message a user reads must agree: {_reason(body)!r}")
 
     def test_a_clean_call_writes_no_deny_row(self):
         """Fires-only, by design: a row per allowed call runs 99%+ noise and drowns the signal."""

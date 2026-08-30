@@ -18,10 +18,18 @@ if [ -z "${CLAUDE_PLUGIN_ROOT:-}" ] || ! cd "$CLAUDE_PLUGIN_ROOT" 2>/dev/null \
     || [ ! -f ward/dispatch.py ]; then
   deny_startup
 fi
-if ! command -v python3 >/dev/null 2>&1; then
+# WARD_PYTHON names the interpreter when it is not called `python3` on this host. Without it,
+# such a host gets `command -v python3` failing and Ward denying every tool call -- the right
+# direction for a gate and a useless machine, fixable only by editing a shipped file. Ported by
+# shape from `Causality:hooks/dispatch.sh`; the failure DIRECTION is deliberately not ported,
+# because that shim fails open by design. An override naming a missing or broken interpreter
+# still fails closed here, so this can never be a way to turn Ward off. One executable, no
+# arguments: it is passed as a single word so a value carrying flags fails closed rather than
+# word-splitting into something unintended.
+if ! command -v "${WARD_PYTHON:-python3}" >/dev/null 2>&1; then
   deny_startup
 fi
-if ! output=$(python3 -m ward.dispatch); then
+if ! output=$("${WARD_PYTHON:-python3}" -m ward.dispatch); then
   deny_startup
 fi
 printf '%s' "$output"

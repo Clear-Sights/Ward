@@ -9,7 +9,7 @@ import re
 import subprocess
 import sys
 
-from measure import check_count, contiguous_count, corpus_counts, suite_count
+from measure import derailment_partition, derailment_rules, check_count, contiguous_count, corpus_counts, suite_count
 
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -36,11 +36,15 @@ def generated() -> dict[str, str]:
     passed, executed = replay_result()
     if sessions != executed:
         raise RuntimeError("corpus count and replay session count disagree")
+    tabled, off_table = derailment_partition()
+    off_table_text = (
+        " and ".join(f"`{name}` preflight" for name in off_table) if off_table
+        else "preflight")
     return {
         "quickstart-checks":
             f"Ward is a Claude Code `PreToolUse` plugin: an ordered {rows}-row table of exact denials over the\n"
             "pending tool call. A match denies with a citation and a retry hint; anything else is a silent\n"
-            "`{}`. No state, no history, no configuration.",
+            "`{}`. No state, no history, and nothing configurable about what it denies.",
         "checks-heading":
             f"The ordered `CHECKS` table in [plugin/ward/checks.py](plugin/ward/checks.py) contains these {rows} rows. The first\n"
             "matching row wins.",
@@ -65,10 +69,12 @@ def generated() -> dict[str, str]:
             "OK",
         "replay-summary":
             "Beyond the unit suite, `python3 eval/replay.py` replays recorded sessions through the real\n"
-            f"dispatcher: {derailments} derailments (certificate verification disabled, JWT `none` algorithm, paramiko\n"
-            "auto-add host key, a secret in an outbound URL, a shell-startup write) each denied at the event\n"
-            f"where the session went wrong, and a benign control that stays silent — {passed}/{executed}, standard library\n"
-            "only.",
+            f"dispatcher: {derailments} derailments — {tabled} for the {rows} rows of the table and "
+            f"{len(off_table)} for\n"
+            f"the {off_table_text} that precedes it — each denied at the\n"
+            "event where the session went wrong, and by the row that names it:\n\n"
+            + "".join(f"  - `ward.{rule}`\n" for rule in derailment_rules())
+            + f"\nand a benign control that stays silent — {passed}/{executed}, standard library only.",
         "suite-count":
             f"The shipped suite contains {tests} tests. Keep new predicates narrow, add both firing and clean cases,\n"
             "and exercise the shell entrypoint when changing hook wiring.",

@@ -25,7 +25,7 @@ Ward sits before the act: the call is denied with a citation and a retry hint be
 <!-- BEGIN GENERATED quickstart-checks -->
 Ward is a Claude Code `PreToolUse` plugin: an ordered 11-row table of exact denials over the
 pending tool call. A match denies with a citation and a retry hint; anything else is a silent
-`{}`. No state, no history, no configuration.
+`{}`. No state, no history, and nothing configurable about what it denies.
 <!-- END GENERATED quickstart-checks -->
 
 Ward requires Python 3.11 or newer and has no Python package dependencies. From a local checkout:
@@ -39,7 +39,10 @@ The marketplace entry in [.claude-plugin/marketplace.json](.claude-plugin/market
 the plugin metadata in [plugin/.claude-plugin/plugin.json](plugin/.claude-plugin/plugin.json). Enabling it loads
 [plugin/hooks/hooks.json](plugin/hooks/hooks.json), which sends every `PreToolUse` event through the single
 [plugin/hooks/dispatch.sh](plugin/hooks/dispatch.sh) entrypoint. The shim pins execution to the plugin root and
-runs `python3 -m ward.dispatch`; there is no separate package-install step for the hook.
+runs `python3 -m ward.dispatch`; there is no separate package-install step for the hook. On a host
+where the interpreter is not called `python3`, set `WARD_PYTHON` to its path — one executable, no
+arguments. That names the interpreter and nothing else: an override pointing at a missing or
+broken interpreter still denies, so it cannot be used to turn Ward off.
 
 To exercise that same bridge without modifying a file:
 
@@ -209,7 +212,7 @@ Run the standard-library suite from the repository root:
 <!-- BEGIN GENERATED suite-output -->
 $ python3 -m unittest discover -s tests
 ...
-Ran 123 tests in <elapsed>s
+Ran 139 tests in <elapsed>s
 
 OK
 <!-- END GENERATED suite-output -->
@@ -217,15 +220,29 @@ OK
 
 <!-- BEGIN GENERATED replay-summary -->
 Beyond the unit suite, `python3 eval/replay.py` replays recorded sessions through the real
-dispatcher: 5 derailments (certificate verification disabled, JWT `none` algorithm, paramiko
-auto-add host key, a secret in an outbound URL, a shell-startup write) each denied at the event
-where the session went wrong, and a benign control that stays silent — 6/6, standard library
-only.
+dispatcher: 12 derailments — 11 for the 11 rows of the table and 1 for
+the `ward.cannot_evaluate` preflight that precedes it — each denied at the
+event where the session went wrong, and by the row that names it:
+
+  - `ward.cannot_evaluate`
+  - `ward.cert_none_mode`
+  - `ward.cert_reqs_none`
+  - `ward.cert_verify_disabled`
+  - `ward.integrity_suppression_flag`
+  - `ward.jwt_none_alg`
+  - `ward.jwt_signature_disabled`
+  - `ward.outbound_secret_pattern`
+  - `ward.paramiko_host_key_weakened`
+  - `ward.self_mute_guard`
+  - `ward.forbidden_location`
+  - `ward.timing_unsafe_compare`
+
+and a benign control that stays silent — 13/13, standard library only.
 <!-- END GENERATED replay-summary -->
 It exits with status 0 iff every session meets its expectation.[^m-replay-exit]
 
 <!-- BEGIN GENERATED suite-count -->
-The shipped suite contains 123 tests. Keep new predicates narrow, add both firing and clean cases,
+The shipped suite contains 139 tests. Keep new predicates narrow, add both firing and clean cases,
 and exercise the shell entrypoint when changing hook wiring.
 <!-- END GENERATED suite-count -->
 
