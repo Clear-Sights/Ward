@@ -77,27 +77,31 @@ def _run_steps(path: Path) -> list:
     see a step it cannot check. `test_the_step_scan_finds_the_steps` is the guard against that:
     it fails if the splitter stops finding the suite anywhere.
     """
-    steps, label, script, run_indent = [], None, None, None
+    steps, label, script, run_indent, step_id = [], None, None, None, None
     for raw in path.read_text(encoding="utf-8").splitlines():
         stripped = raw.strip()
         indent = len(raw) - len(raw.lstrip())
         if script is not None:
             if stripped and indent <= run_indent:
-                steps.append((f"{path.name}:{label or 'unnamed step'}", "\n".join(script)))
+                steps.append((f"{path.name}:{label or 'unnamed step'}", "\n".join(script),
+                              step_id))
                 script = None
             else:
                 script.append(raw)
                 continue
         if stripped.startswith("- name:"):
-            label = stripped[len("- name:"):].strip()
+            label, step_id = stripped[len("- name:"):].strip(), None
+        elif re.match(r"id:\s*\S+$", stripped):
+            step_id = stripped.split(":", 1)[1].strip()
         elif stripped.startswith("- ") and ":" in stripped and "name:" not in stripped:
             label = None
         if re.match(r"run:\s*[|>]", stripped):
             run_indent, script = indent, []
         elif stripped.startswith("run:"):
-            steps.append((f"{path.name}:{label or 'unnamed step'}", stripped[len("run:"):].strip()))
+            steps.append((f"{path.name}:{label or 'unnamed step'}",
+                          stripped[len("run:"):].strip(), step_id))
     if script is not None:
-        steps.append((f"{path.name}:{label or 'unnamed step'}", "\n".join(script)))
+        steps.append((f"{path.name}:{label or 'unnamed step'}", "\n".join(script), step_id))
     return steps
 
 
@@ -107,15 +111,20 @@ def _steps_writing(path: Path, step_id: str):
     """The output names a step with `id: <step_id>` writes to GITHUB_OUTPUT, or None if no step
     in this workflow carries that id. Read from the step's own script, so a published expression
     is checked against a step that exists and an output that step actually sets."""
-    text = path.read_text(encoding="utf-8")
-    ids = re.findall(r"^\s*id:\s*(\S+)\s*$", text, re.MULTILINE)
-    if step_id not in ids:
+    owned = [raw for _label, raw, owner in _run_steps(path) if owner == step_id]
+    if not owned:
         return None
     written = set()
-    for _label, raw in _run_steps(path):
+    for raw in owned:
         for line in _without_shell_comments(raw).splitlines():
-            for name in re.findall(r'echo\s+"?([\w-]+)=', line):
-                if "GITHUB_OUTPUT" in line:
+            if "GITHUB_OUTPUT" not in line:
+                continue
+            for name, value in re.findall(r'echo\s+"?([\w-]+)=([^">]*)', line):
+                # A LITERAL IS NOT A MEASUREMENT. `echo "sessions=25" >> $GITHUB_OUTPUT` moves a
+                # hard-coded number into a step output and out through the published string,
+                # which is the same defect one indirection further along. The value written has
+                # to come from a shell variable.
+                if "$" in value:
                     written.add(name)
     return written
 
@@ -149,7 +158,7 @@ class NoWorkflowPublishesANumberItDidNotMeasure(unittest.TestCase):
         # old literal "82-test suite" while describing it, and a law that matched its own
         # explanation would fire on the fix.
         published = [text for path in sorted(WORKFLOWS.glob("*.yml"))
-                     for _label, raw in _run_steps(path)
+                     for _label, raw, _owner in _run_steps(path)
                      for text in [_without_shell_comments(raw)]
                      if any(pattern.search(text) for pattern, _what in self.COUNTED)]
         self.assertTrue(
@@ -161,7 +170,7 @@ class NoWorkflowPublishesANumberItDidNotMeasure(unittest.TestCase):
     def test_every_published_count_is_read_from_a_step_output(self) -> None:
         offenders = []
         for path in sorted(WORKFLOWS.glob("*.yml")):
-            for label, raw in _run_steps(path):
+            for label, raw, _owner in _run_steps(path):
                 text = _without_shell_comments(raw)
                 for pattern, what in self.COUNTED:
                     for found in pattern.finditer(text):
@@ -201,7 +210,7 @@ class EveryWorkflowThatRunsTheSuiteReadsItsCount(unittest.TestCase):
         # invocation is deleted -- the guard against vacuity would itself be vacuous.
         running = [f.name for f in files
                    if any(_RUNS_SUITE.search(line) and re.search(r"\bpython3?\b", line)
-                          for _label, raw in _run_steps(f)
+                          for _label, raw, _owner in _run_steps(f)
                           for line in _without_shell_comments(raw).splitlines())]
         self.assertTrue(running, "no workflow runs the unit suite at all, so this law is vacuous")
 
@@ -225,7 +234,7 @@ class EveryWorkflowThatRunsTheSuiteReadsItsCount(unittest.TestCase):
         """
         offenders = []
         for path in sorted(WORKFLOWS.glob("*.yml")):
-            for name, script in _run_steps(path):
+            for name, script, _owner in _run_steps(path):
                 if True:
                     invocations = [line for line in script.splitlines()
                                    if _RUNS_SUITE.search(line) and re.search(r"\bpython3?\b", line)]
@@ -255,7 +264,7 @@ class EveryWorkflowThatRunsTheSuiteReadsItsCount(unittest.TestCase):
         """A parse that finds no invoking step would make the law above pass over everything."""
         found = []
         for path in sorted(WORKFLOWS.glob("*.yml")):
-            for name, raw in _run_steps(path):
+            for name, raw, _owner in _run_steps(path):
                 script = _without_shell_comments(raw)
                 if any(_RUNS_SUITE.search(line) and re.search(r"\bpython3?\b", line)
                        for line in script.splitlines()):
