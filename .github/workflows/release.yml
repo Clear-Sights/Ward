@@ -33,7 +33,25 @@ jobs:
       - name: Run the gates
         run: |
           python3 -m pip install -e .
-          python3 -m unittest discover -s tests
+          # THE COUNT IS THE CHECK, same as ci.yml's unit-suite step and for the same reason:
+          # `unittest discover` prints OK and exits 0 when it collects NOTHING, so a bare
+          # `discover` call reports green forever on a suite that stopped being found. ci.yml
+          # already guarded against that and this workflow -- the one that decides what ships --
+          # did not, so a release could be cut on a suite that ran zero tests.
+          set +e
+          python3 -m unittest discover -s tests -v 2>&1 | tee /tmp/unittest.log
+          status=${PIPESTATUS[0]}
+          set -e
+          ran=$(sed -n 's/^Ran \([0-9][0-9]*\) test.*/\1/p' /tmp/unittest.log | tail -1)
+          if [ "$status" -ne 0 ]; then
+            echo "Unit suite failed with status $status."
+            exit "$status"
+          fi
+          if [ -z "$ran" ] || [ "$ran" -eq 0 ]; then
+            echo "No tests were collected. Finding nothing is not finding nothing wrong."
+            exit 1
+          fi
+          echo "Unit suite passed: $ran tests ran."
           python3 eval/replay.py
 
       - name: Build the install bundle (no eval, no tests, no tooling)
