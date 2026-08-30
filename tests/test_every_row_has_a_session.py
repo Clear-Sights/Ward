@@ -22,6 +22,15 @@ from ward.checks import CHECKS
 REPO = Path(__file__).resolve().parent.parent
 CORPUS = REPO / "eval" / "corpus"
 
+# A denial Ward emits that is deliberately NOT a row in CHECKS. `_cannot_evaluate` is the
+# fail-closed preflight, kept outside the table so the substantive predicates remain the
+# advertised eleven -- but the host still receives it as a denial, and it is the direction
+# that most needs end-to-end evidence: it is what Ward does when it CANNOT see the change
+# it is being asked to judge. Named here rather than admitted silently, so a future denial
+# outside CHECKS is a decision someone makes out loud instead of a session that quietly
+# stops meaning anything.
+PREFLIGHT_DENIALS = {"ward.cannot_evaluate"}
+
 
 def declared_rules() -> dict[str, str]:
     """{rule id: session filename} over every corpus session that declares one."""
@@ -44,7 +53,7 @@ class EveryRowIsDrivenEndToEnd(unittest.TestCase):
             f"ordered table shadows it. Add a session to eval/corpus declaring the row.")
 
     def test_every_session_declares_a_row_that_exists(self) -> None:
-        known = {row_id for row_id, _, _ in CHECKS}
+        known = {row_id for row_id, _, _ in CHECKS} | PREFLIGHT_DENIALS
         for session in sorted(CORPUS.glob("*.jsonl")):
             header = json.loads(session.read_text().splitlines()[0])
             rule = header.get("rule")
@@ -56,6 +65,21 @@ class EveryRowIsDrivenEndToEnd(unittest.TestCase):
                 continue
             self.assertIn(rule, known,
                           f"{session.name} declares {rule}, which is not a row in CHECKS")
+
+    def test_every_preflight_denial_is_driven_end_to_end(self) -> None:
+        """The fail-closed path needs a session for the same reason every row does.
+
+        `test_checks.py` fires the preflight in process, which cannot see whether the real
+        dispatcher reaches it at all, nor whether an earlier row denies first and hides it.
+        A denial nothing has been observed producing through the real entry point is a
+        claim about behaviour, not evidence of it.
+        """
+        declared = set(declared_rules())
+        missing = sorted(PREFLIGHT_DENIALS - declared)
+        self.assertFalse(
+            missing,
+            f"these denials are never driven through the real entrypoint: {missing}. Add a "
+            f"session to eval/corpus declaring one.")
 
     def test_the_check_can_fail(self) -> None:
         """Planted: a row absent from the corpus must be reported by name."""

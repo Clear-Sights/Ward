@@ -212,7 +212,7 @@ Run the standard-library suite from the repository root:
 <!-- BEGIN GENERATED suite-output -->
 $ python3 -m unittest discover -s tests
 ...
-Ran 128 tests in <elapsed>s
+Ran 129 tests in <elapsed>s
 
 OK
 <!-- END GENERATED suite-output -->
@@ -220,9 +220,10 @@ OK
 
 <!-- BEGIN GENERATED replay-summary -->
 Beyond the unit suite, `python3 eval/replay.py` replays recorded sessions through the real
-dispatcher: 11 derailments — one for every row of the table — each denied at the
+dispatcher: 12 derailments — one for every row of the table — each denied at the
 event where the session went wrong, and by the row that names it:
 
+  - `ward.cannot_evaluate`
   - `ward.cert_none_mode`
   - `ward.cert_reqs_none`
   - `ward.cert_verify_disabled`
@@ -235,12 +236,12 @@ event where the session went wrong, and by the row that names it:
   - `ward.forbidden_location`
   - `ward.timing_unsafe_compare`
 
-and a benign control that stays silent — 12/12, standard library only.
+and a benign control that stays silent — 13/13, standard library only.
 <!-- END GENERATED replay-summary -->
 It exits with status 0 iff every session meets its expectation.[^m-replay-exit]
 
 <!-- BEGIN GENERATED suite-count -->
-The shipped suite contains 128 tests. Keep new predicates narrow, add both firing and clean cases,
+The shipped suite contains 129 tests. Keep new predicates narrow, add both firing and clean cases,
 and exercise the shell entrypoint when changing hook wiring.
 <!-- END GENERATED suite-count -->
 
