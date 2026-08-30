@@ -1,0 +1,3 @@
+{"description": "a Write arrives with its path but no content, so Ward has nothing to inspect", "rule": "ward.cannot_evaluate", "derailment": "the mutation Ward is asked to judge carries none of the input Ward judges it by, and a check that cannot see the change must not report it clean", "derails_at": 1}
+{"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "/workspace/repo/verify.py"}, "cwd": "/workspace/repo", "session_id": "w"}
+{"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "/workspace/repo/verify.py"}, "cwd": "/workspace/repo", "session_id": "w"}

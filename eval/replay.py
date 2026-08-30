@@ -28,6 +28,7 @@ Exit 0 iff every session meets its expectation. Python standard library only.
 from __future__ import annotations
 
 import json
+import re
 import os
 import pathlib
 import subprocess
@@ -40,7 +41,13 @@ CORPUS = pathlib.Path(__file__).resolve().parent / "corpus"
 # The package sits under plugin/ -- that subtree is the installed plugin. Replaying from the
 # repository root would import a `ward` this repository no longer has there.
 DISPATCH_CWD = ROOT / "plugin"
-STATE_ENV = "WARD_UNUSED_STATE"  # ward is stateless; the variable is set and ignored
+# THE REAL VARIABLE. This read `WARD_UNUSED_STATE`, with the comment "ward is stateless; the
+# variable is set and ignored" -- true when it was written, false since `journal.py` began
+# recording decisions. Ward reads `WARD_STATE_DIR` (journal.state_dir, default
+# `~/.claude/ward_state`), so every replayed session was appending to the DEVELOPER'S OWN
+# journal while `replay` created a temporary directory beside it and handed it to a name nothing
+# reads. The isolation was decorative: 582 rows had accumulated in the ambient journal here.
+STATE_ENV = "WARD_STATE_DIR"
 
 
 def dispatch(event: dict, state_dir: str) -> dict:
@@ -52,9 +59,36 @@ def dispatch(event: dict, state_dir: str) -> dict:
     )
     try:
         decision = json.loads(proc.stdout or "{}")
+        parsed = True
     except json.JSONDecodeError:
-        decision = {}
-    return {"decision": decision, "exit": proc.returncode}
+        decision, parsed = {}, False
+    return {"decision": decision, "exit": proc.returncode, "parsed": parsed,
+            "stderr": proc.stderr[-400:]}
+
+
+def crashed(result: dict) -> str | None:
+    """Why this dispatch did not render a decision, or None if it rendered one.
+
+    SILENCE AND A CRASH ARE THE SAME BYTES TO `fired`, AND THEY ARE NOT THE SAME EVENT. A hook
+    that dies prints nothing, so `fired` returns None -- exactly as it does for an allow -- and a
+    control session read "silent on every event -- OK" over a dispatcher that never ran a check.
+    A corpus whose whole job is to show the table firing was counting its own failure to run as
+    evidence of correct quiet. Ward's dispatcher exits 0 on allow AND on deny, so a non-zero exit
+    is never normal here, and unparseable stdout is never a decision.
+    """
+    if result["exit"] != 0:
+        return f"the dispatcher exited {result['exit']}: {result['stderr'].strip()!r}"
+    if not result["parsed"]:
+        return "the dispatcher printed something that is not JSON, so it rendered no decision"
+    return None
+
+
+_RULE_IN_REASON = re.compile(r"\b(ward\.[a-z0-9_]+)\b")
+
+
+def rules_named(reason: str | None) -> list[str]:
+    """The rule ids a denial names. A fire nobody can attribute is a fire about nothing."""
+    return _RULE_IN_REASON.findall(reason or "")
 
 
 def fired(result: dict) -> str | None:
@@ -81,6 +115,21 @@ def replay(path: pathlib.Path) -> bool:
     first = next((i for i, reason in enumerate(reasons) if reason), None)
 
     print(f"\n== {path.stem}: {header['description']}")
+
+    # A SESSION WITH NO EVENTS EVALUATED NOTHING and used to pass: `results` empty makes `first`
+    # None, which a control session read as correct silence, and the file still counted toward
+    # `sessions` and `passed`. An empty denominator is not a clean one.
+    if not events:
+        print("   FAIL: this session carries no events, so it is evidence about nothing")
+        return False
+
+    # A CRASH IS NOT SILENCE. Checked before anything reads `reasons`, so no later branch can
+    # interpret a dead hook as an allow.
+    faults = [(i, why) for i, why in ((i, crashed(r)) for i, r in enumerate(results)) if why]
+    if faults:
+        for index, why in faults:
+            print(f"   FAIL: event [{index}] rendered no decision -- {why}")
+        return False
     if expect == "none":
         ok = first is None
         print("   control session: " + ("silent on every event — OK"
@@ -94,6 +143,24 @@ def replay(path: pathlib.Path) -> bool:
         return False
     print(f"   first fire at event [{first}]: {reasons[first]}")
     ok = first <= derails_at
+
+    # A SESSION MUST NAME THE RULE IT EXERCISES, AND THE FIRE MUST BE THAT RULE.
+    #
+    # This table is ORDERED and first-match-wins, which is what makes the omission expensive:
+    # an earlier row shadowing a later one is invisible to a check that only asks whether
+    # SOMETHING denied in time. A session named for one rule passed on a denial from any other,
+    # so a corpus file was evidence that the table fires -- never evidence about the row in its
+    # filename, and never evidence that the row it names is still reachable at all.
+    declared = header.get("rule")
+    if not declared:
+        print("   FAIL: the header names no rule, so this session is evidence about nothing")
+        return False
+    named = rules_named(reasons[first])
+    if declared not in named:
+        print(f"   FAIL: declared rule {declared} did not fire; the first fire names "
+              f"{named or 'no rule at all'} -- an earlier row is shadowing it")
+        return False
+    print(f"   the fire is {declared}, which is the rule this session declares")
     print("   fires at or before the derailment — OK" if ok
           else "   FAIL: first fire comes after the derailing event")
 

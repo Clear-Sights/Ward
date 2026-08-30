@@ -81,7 +81,28 @@ class Shim(unittest.TestCase):
         self.tmp_path = Path(scratch.name)
 
     def test_shim_is_executable(self):
-        _ck(os.access(SHIM, os.X_OK), "hooks/dispatch.sh must carry the executable bit in git")
+        """The bit GIT records, not the one this checkout happens to have.
+
+        `os.access(SHIM, os.X_OK)` reads the working tree, while the message beside it said "in
+        git" -- and git's mode is what ships. A local `chmod +x` made this pass over an index
+        recording 100644, and a restrictive checkout could fail it over an index that is
+        correct. Neither answer was about the thing being claimed.
+
+        Both are checked now: the index mode, which is what an installing user receives, and the
+        working tree, because a shim that is not executable HERE cannot be run by the tests below.
+        """
+        done = subprocess.run(["git", "ls-files", "-s", "--", str(SHIM.relative_to(REPO))],
+                              cwd=REPO, capture_output=True, text=True, timeout=60)
+        _ck(done.returncode == 0 and done.stdout.strip(),
+            f"git does not track {SHIM}; its recorded mode cannot be read, and absence is not "
+            f"a pass")
+        mode = done.stdout.split()[0]
+        _ck(mode == "100755",
+            f"git records mode {mode} for hooks/dispatch.sh; it must be 100755, because that is "
+            f"the bit an installing user receives. A local chmod does not change it.")
+        _ck(os.access(SHIM, os.X_OK),
+            "hooks/dispatch.sh is not executable in this checkout, so the shim tests below "
+            "cannot run it")
 
     def test_hook_uses_exec_form_for_plugin_path(self):
         config = json.loads(HOOKS.read_text())
@@ -158,6 +179,48 @@ class Shim(unittest.TestCase):
         })
         _ck(proc.returncode == 0, proc.stderr)
         _ck(json.loads(proc.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny")
+
+    def test_ward_python_names_the_interpreter_when_python3_is_not_on_path(self):
+        """The override exists for a host where the interpreter is not called `python3`.
+
+        Without it, such a host gets `command -v python3` failing and Ward denying every single
+        tool call -- the right direction for a security gate and a useless machine, with no fix
+        short of editing a shipped file. Ported by shape from `Causality:hooks/dispatch.sh`, which
+        carries `${CAUSALITY_PYTHON:-python3}`; the failure direction is NOT ported, because that
+        shim fails open by design and this one must not.
+        """
+        tools = self.tmp_path / "renamed-python"
+        tools.mkdir()
+        (tools / "bash").symlink_to("/bin/bash")
+        interpreter = self.bare_python_dir / "python3"
+        proc = _run_shim(FLAGGED, cwd=self.tmp_path, env_overrides={
+            "CLAUDE_PLUGIN_ROOT": str(PLUGIN), "PATH": str(tools),
+            "WARD_PYTHON": str(interpreter),
+        })
+        _ck(proc.returncode == 0, proc.stderr)
+        out = json.loads(proc.stdout)["hookSpecificOutput"]
+        # The real check fired, so the shim ran the real dispatcher through the named interpreter
+        # -- not a startup denial, which would look identical at the `permissionDecision` level.
+        _ck(out["permissionDecision"] == "deny", proc.stdout)
+        _ck("shim could not start" not in out["permissionDecisionReason"], proc.stdout)
+
+    def test_ward_python_naming_a_broken_interpreter_still_fails_closed(self):
+        """The override may not become a way to turn Ward off by pointing it at nothing."""
+        tools = self.tmp_path / "broken-override"
+        tools.mkdir()
+        (tools / "bash").symlink_to("/bin/bash")
+        for label, target in (("nonexistent", str(self.tmp_path / "no-such-python")),
+                              ("exits nonzero", "/bin/false")):
+            proc = _run_shim(FLAGGED, cwd=self.tmp_path, env_overrides={
+                "CLAUDE_PLUGIN_ROOT": str(PLUGIN),
+                "PATH": f"{self.bare_python_dir}{os.pathsep}{str(tools)}",
+                "WARD_PYTHON": target,
+            })
+            _ck(proc.returncode == 0, f"{label}: {proc.stderr}")
+            out = json.loads(proc.stdout)["hookSpecificOutput"]
+            _ck(out["permissionDecision"] == "deny", f"{label}: {proc.stdout}")
+            _ck("shim could not start" in out["permissionDecisionReason"],
+                f"{label}: {proc.stdout}")
 
     def test_allow_payload_passes_through_byte_for_byte(self):
         event = {"hook_event_name": "PreToolUse", "tool_name": "Read",
