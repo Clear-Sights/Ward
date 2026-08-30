@@ -102,6 +102,24 @@ def _run_steps(path: Path) -> list:
 
 
 
+
+def _steps_writing(path: Path, step_id: str):
+    """The output names a step with `id: <step_id>` writes to GITHUB_OUTPUT, or None if no step
+    in this workflow carries that id. Read from the step's own script, so a published expression
+    is checked against a step that exists and an output that step actually sets."""
+    text = path.read_text(encoding="utf-8")
+    ids = re.findall(r"^\s*id:\s*(\S+)\s*$", text, re.MULTILINE)
+    if step_id not in ids:
+        return None
+    written = set()
+    for _label, raw in _run_steps(path):
+        for line in _without_shell_comments(raw).splitlines():
+            for name in re.findall(r'echo\s+"?([\w-]+)=', line):
+                if "GITHUB_OUTPUT" in line:
+                    written.add(name)
+    return written
+
+
 class NoWorkflowPublishesANumberItDidNotMeasure(unittest.TestCase):
     """A release note stating a count must take it from the run, not from a literal.
 
@@ -124,7 +142,7 @@ class NoWorkflowPublishesANumberItDidNotMeasure(unittest.TestCase):
         (re.compile(_TOKEN + r"-test suite"), "the suite size"),
         (re.compile(_TOKEN + r"/" + _TOKEN + r" corpus replay"), "the corpus replay denominator"),
     )
-    FROM_A_STEP = re.compile(r"\$\{\{\s*steps\.[\w-]+\.outputs\.[\w-]+\s*\}\}")
+    FROM_A_STEP = re.compile(r"\$\{\{\s*steps\.([\w-]+)\.outputs\.([\w-]+)\s*\}\}")
 
     def test_the_check_has_a_subject(self) -> None:
         # Comments stripped first: the step that carries this defect's explanation quotes the
@@ -148,10 +166,25 @@ class NoWorkflowPublishesANumberItDidNotMeasure(unittest.TestCase):
                 for pattern, what in self.COUNTED:
                     for found in pattern.finditer(text):
                         for group in found.groups():
-                            if not self.FROM_A_STEP.search(group):
+                            reference = self.FROM_A_STEP.search(group)
+                            if not reference:
                                 offenders.append(
                                     f"{label}: publishes {what} as the literal {group!r} in "
                                     f"{found.group(0)!r}")
+                                continue
+                            # ...AND THE STEP IT NAMES EXISTS AND WRITES THAT OUTPUT. The
+                            # spelling alone is satisfied by `${{ steps.nothing.outputs.made_up }}`,
+                            # which renders empty and publishes a blank where a number belongs.
+                            step_id, output = reference.group(1), reference.group(2)
+                            writers = _steps_writing(path, step_id)
+                            if writers is None:
+                                offenders.append(
+                                    f"{label}: publishes {what} from step id {step_id!r}, which "
+                                    f"no step in this workflow declares")
+                            elif output not in writers:
+                                offenders.append(
+                                    f"{label}: publishes {what} as {step_id}.{output}, and that "
+                                    f"step writes only {sorted(writers)} to GITHUB_OUTPUT")
         self.assertEqual(
             [], offenders,
             "a workflow publishes a measured count as a literal. It goes stale the moment the "
@@ -163,7 +196,13 @@ class EveryWorkflowThatRunsTheSuiteReadsItsCount(unittest.TestCase):
     def test_the_check_has_a_subject(self) -> None:
         files = sorted(WORKFLOWS.glob("*.yml"))
         self.assertTrue(files, f"no workflows under {WORKFLOWS}; nothing below is checked")
-        running = [f.name for f in files if _RUNS_SUITE.search(f.read_text())]
+        # INVOKING LINES, not raw text. Both workflows name `unittest discover` inside the
+        # comment explaining this defect, so a scan of raw text stays non-empty after every real
+        # invocation is deleted -- the guard against vacuity would itself be vacuous.
+        running = [f.name for f in files
+                   if any(_RUNS_SUITE.search(line) and re.search(r"\bpython3?\b", line)
+                          for _label, raw in _run_steps(f)
+                          for line in _without_shell_comments(raw).splitlines())]
         self.assertTrue(running, "no workflow runs the unit suite at all, so this law is vacuous")
 
     def test_every_such_workflow_reads_the_collected_count(self) -> None:
@@ -175,6 +214,14 @@ class EveryWorkflowThatRunsTheSuiteReadsItsCount(unittest.TestCase):
         green. The unit is the step, so the step is the unit here: the YAML is parsed, the step
         whose `run:` invokes `unittest discover` is found, and THAT script must extract the count
         and branch on it.
+
+        STATED LIMIT, and it is the one this law cannot close. Requiring the step to extract the
+        count and branch on it is a check on the COMMANDS PRESENT, not on data flow: a `ran=`
+        assignment could be overwritten later in the same script, or sit in a branch the step
+        never enters, and this would still pass. Establishing otherwise means executing the
+        workflow, which no test here does. What is bounded instead is the shape -- the extraction
+        and the comparison must both live in the step that runs the suite, which is what made the
+        original defect, count logic sitting in a different step, visible at all.
         """
         offenders = []
         for path in sorted(WORKFLOWS.glob("*.yml")):
@@ -208,8 +255,10 @@ class EveryWorkflowThatRunsTheSuiteReadsItsCount(unittest.TestCase):
         """A parse that finds no invoking step would make the law above pass over everything."""
         found = []
         for path in sorted(WORKFLOWS.glob("*.yml")):
-            for name, script in _run_steps(path):
-                if _RUNS_SUITE.search(script):
+            for name, raw in _run_steps(path):
+                script = _without_shell_comments(raw)
+                if any(_RUNS_SUITE.search(line) and re.search(r"\bpython3?\b", line)
+                       for line in script.splitlines()):
                     found.append(name)
         self.assertTrue(
             found,
