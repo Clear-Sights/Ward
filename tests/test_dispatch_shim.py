@@ -159,6 +159,48 @@ class Shim(unittest.TestCase):
         _ck(proc.returncode == 0, proc.stderr)
         _ck(json.loads(proc.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny")
 
+    def test_ward_python_names_the_interpreter_when_python3_is_not_on_path(self):
+        """The override exists for a host where the interpreter is not called `python3`.
+
+        Without it, such a host gets `command -v python3` failing and Ward denying every single
+        tool call -- the right direction for a security gate and a useless machine, with no fix
+        short of editing a shipped file. Ported by shape from `Causality:hooks/dispatch.sh`, which
+        carries `${CAUSALITY_PYTHON:-python3}`; the failure direction is NOT ported, because that
+        shim fails open by design and this one must not.
+        """
+        tools = self.tmp_path / "renamed-python"
+        tools.mkdir()
+        (tools / "bash").symlink_to("/bin/bash")
+        interpreter = self.bare_python_dir / "python3"
+        proc = _run_shim(FLAGGED, cwd=self.tmp_path, env_overrides={
+            "CLAUDE_PLUGIN_ROOT": str(PLUGIN), "PATH": str(tools),
+            "WARD_PYTHON": str(interpreter),
+        })
+        _ck(proc.returncode == 0, proc.stderr)
+        out = json.loads(proc.stdout)["hookSpecificOutput"]
+        # The real check fired, so the shim ran the real dispatcher through the named interpreter
+        # -- not a startup denial, which would look identical at the `permissionDecision` level.
+        _ck(out["permissionDecision"] == "deny", proc.stdout)
+        _ck("shim could not start" not in out["permissionDecisionReason"], proc.stdout)
+
+    def test_ward_python_naming_a_broken_interpreter_still_fails_closed(self):
+        """The override may not become a way to turn Ward off by pointing it at nothing."""
+        tools = self.tmp_path / "broken-override"
+        tools.mkdir()
+        (tools / "bash").symlink_to("/bin/bash")
+        for label, target in (("nonexistent", str(self.tmp_path / "no-such-python")),
+                              ("exits nonzero", "/bin/false")):
+            proc = _run_shim(FLAGGED, cwd=self.tmp_path, env_overrides={
+                "CLAUDE_PLUGIN_ROOT": str(PLUGIN),
+                "PATH": f"{self.bare_python_dir}{os.pathsep}{str(tools)}",
+                "WARD_PYTHON": target,
+            })
+            _ck(proc.returncode == 0, f"{label}: {proc.stderr}")
+            out = json.loads(proc.stdout)["hookSpecificOutput"]
+            _ck(out["permissionDecision"] == "deny", f"{label}: {proc.stdout}")
+            _ck("shim could not start" in out["permissionDecisionReason"],
+                f"{label}: {proc.stdout}")
+
     def test_allow_payload_passes_through_byte_for_byte(self):
         event = {"hook_event_name": "PreToolUse", "tool_name": "Read",
                  "tool_input": {"file_path": "/workspace/repo/a.txt"}, "cwd": "/workspace/repo"}
