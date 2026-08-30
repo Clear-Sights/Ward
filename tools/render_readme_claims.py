@@ -9,7 +9,7 @@ import re
 import subprocess
 import sys
 
-from measure import derailment_rules, check_count, contiguous_count, corpus_counts, suite_count
+from measure import derailment_partition, derailment_rules, check_count, contiguous_count, corpus_counts, suite_count
 
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -36,6 +36,10 @@ def generated() -> dict[str, str]:
     passed, executed = replay_result()
     if sessions != executed:
         raise RuntimeError("corpus count and replay session count disagree")
+    tabled, off_table = derailment_partition()
+    off_table_text = (
+        " and ".join(f"`{name}` preflight" for name in off_table) if off_table
+        else "preflight")
     return {
         "quickstart-checks":
             f"Ward is a Claude Code `PreToolUse` plugin: an ordered {rows}-row table of exact denials over the\n"
@@ -65,7 +69,9 @@ def generated() -> dict[str, str]:
             "OK",
         "replay-summary":
             "Beyond the unit suite, `python3 eval/replay.py` replays recorded sessions through the real\n"
-            f"dispatcher: {derailments} derailments — one for every row of the table — each denied at the\n"
+            f"dispatcher: {derailments} derailments — {tabled} for the {rows} rows of the table and "
+            f"{len(off_table)} for\n"
+            f"the {off_table_text} that precedes it — each denied at the\n"
             "event where the session went wrong, and by the row that names it:\n\n"
             + "".join(f"  - `ward.{rule}`\n" for rule in derailment_rules())
             + f"\nand a benign control that stays silent — {passed}/{executed}, standard library only.",
