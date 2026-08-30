@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import tempfile
 import subprocess
 import sys
 import unittest
@@ -117,6 +118,30 @@ class EveryRowIsDrivenEndToEnd(unittest.TestCase):
                          f"eval/corpus holds {len(corpus)} sessions and the replay drove "
                          f"{sessions}; a session that is never replayed is evidence about nothing")
         self.assertEqual(sessions, passed, done.stdout[-2000:])
+
+    def test_the_replay_isolates_its_state_instead_of_writing_the_real_journal(self) -> None:
+        """The corpus replay must not append to the journal a developer is actually using.
+
+        eval/replay.py creates a temporary state directory per session and passed it under
+        `WARD_UNUSED_STATE`, over a comment reading "ward is stateless; the variable is set and
+        ignored". That stopped being true when journal.py began recording decisions: Ward reads
+        WARD_STATE_DIR, so every replayed session was appending to `~/.claude/ward_state` while
+        the temporary directory sat unused beside it. The isolation was decorative.
+
+        The witness is the ambient value: point WARD_STATE_DIR at a directory of our own, run the
+        whole replay, and require that directory to be untouched. If replay ever stops overriding
+        it per session, the journal lands here and this goes red."""
+        with tempfile.TemporaryDirectory(prefix="ward-ambient-state-") as ambient:
+            done = subprocess.run(
+                [sys.executable, "eval/replay.py"], cwd=REPO, capture_output=True, text=True,
+                env={**os.environ, "PYTHONPATH": "plugin", "WARD_STATE_DIR": ambient},
+                timeout=600)
+            self.assertEqual(0, done.returncode, done.stdout[-2000:])
+            leaked = sorted(p.name for p in Path(ambient).iterdir())
+            self.assertEqual(
+                [], leaked,
+                f"the replay wrote {leaked} into the ambient WARD_STATE_DIR; a corpus run must "
+                f"not append to the journal a developer is using")
 
     def test_the_check_can_fail(self) -> None:
         """Planted: a row absent from the corpus must be reported by name."""

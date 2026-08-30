@@ -41,7 +41,13 @@ CORPUS = pathlib.Path(__file__).resolve().parent / "corpus"
 # The package sits under plugin/ -- that subtree is the installed plugin. Replaying from the
 # repository root would import a `ward` this repository no longer has there.
 DISPATCH_CWD = ROOT / "plugin"
-STATE_ENV = "WARD_UNUSED_STATE"  # ward is stateless; the variable is set and ignored
+# THE REAL VARIABLE. This read `WARD_UNUSED_STATE`, with the comment "ward is stateless; the
+# variable is set and ignored" -- true when it was written, false since `journal.py` began
+# recording decisions. Ward reads `WARD_STATE_DIR` (journal.state_dir, default
+# `~/.claude/ward_state`), so every replayed session was appending to the DEVELOPER'S OWN
+# journal while `replay` created a temporary directory beside it and handed it to a name nothing
+# reads. The isolation was decorative: 582 rows had accumulated in the ambient journal here.
+STATE_ENV = "WARD_STATE_DIR"
 
 
 def dispatch(event: dict, state_dir: str) -> dict:
