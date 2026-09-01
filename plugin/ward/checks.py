@@ -42,7 +42,7 @@ _JWT_CALLEE_RX = re.compile(r"(?i)(?:^|\.)(?:jwt|jose|pyjwt)(?:\.|$)")
 # `self_mute_guard` and `integrity_suppression_flag`, which are a matched pair: a suffix added
 # for one and not the other leaves that check blind on exactly the files it was extended to
 # cover, and the asymmetry reads in review as deliberate scoping rather than a missed edit.
-_MUTATION_TEXT_SUFFIX_RX = re.compile(r"(?i)\.(?:py|toml|ya?ml|json|ini|cfg|conf|sh|bash|zsh)$")
+_MUTATION_TEXT_SUFFIX_RX = re.compile(r"(?i)\.(?:py|toml|ya?ml|json|ini|cfg|conf|sh|bash|zsh|ipynb)$")
 # Memo depth for the two payload caches below, ONE on purpose -- deeper is worse both ways, and the
 # waste being removed is entirely at depth 1 anyway: ONE introduced fragment read eight times
 # (`_cannot_evaluate` plus the seven `_ast_introduced_check` checks), the shape of every Write and
@@ -128,6 +128,12 @@ def scan_target_contents(tool_input: dict) -> tuple[str, ...]:
     new_string = tool_input.get("new_string")
     if new_string:
         return (new_string,)
+    # NotebookEdit spells the introduced text `new_source`. Without this line the notebook tool
+    # reached every gate and then presented NOTHING to scan, which reads as a clean result and is
+    # not one.
+    new_source = tool_input.get("new_source")
+    if isinstance(new_source, str) and new_source:
+        return (new_source,)
     edits = tool_input.get("edits")
     if isinstance(edits, list):
         return tuple(e.get("new_string", "") for e in edits
@@ -219,9 +225,120 @@ def jwt_decode_callee_chain(node) -> Optional[str]:
     return chain
 
 
+_NOTEBOOK_FILE_RX = re.compile(r"(?i)\.ipynb$")
+
+
+def _notebook_cell_sources(text: str, code_only: bool = False) -> tuple[str, ...]:
+    """Every cell's source in a notebook document, or () when `text` is not one.
+
+    `code_only` selects the Python reader's filter. ONE walker with two filters rather than two
+    walkers: the notebook-shape handling below is the part that is easy to get subtly wrong, and a
+    second copy of it is the copy that does not get the next fix.
+
+    A whole-notebook `Write` ships the .ipynb JSON, not Python -- so parsing its `content` as
+    Python fails and every AST check silently skipped it. The Python is in there; it just needs
+    reading out. Markdown and raw cells are deliberately excluded: they are prose, and handing
+    prose to a Python parser produces nothing but noise.
+
+    Conservative in the only direction that matters -- anything that is not a well-formed notebook
+    yields no cells rather than a guess, so this can never manufacture a fragment to judge."""
+    try:
+        doc = json.loads(text)
+    except (ValueError, TypeError, RecursionError):
+        return ()
+    if not isinstance(doc, dict) or not isinstance(doc.get("cells"), list):
+        return ()
+    out = []
+    for cell in doc["cells"]:
+        if not isinstance(cell, dict):
+            continue
+        if code_only and cell.get("cell_type") != "code":
+            continue
+        src = cell.get("source")
+        if isinstance(src, list):
+            src = "".join(part for part in src if isinstance(part, str))
+        if isinstance(src, str) and src:
+            out.append(src)
+    return tuple(out)
+
+
+def scan_introduced_text(tool_input: dict) -> tuple[str, ...]:
+    """The introduced TEXT of a mutation, read OUT of its container.
+
+    The sibling of `scan_introduced_python`, and it exists for a defect that reader does not have:
+    a whole-notebook `Write` ships its cell sources as JSON STRING LITERALS, so a pattern written
+    against real source text cannot match them -- `os.getenv("X")` is spelled `os.getenv(\"X\")`
+    in the document, and the escape falls between the paren and the quote. Scanning the raw JSON
+    therefore reads as clean while the source it encodes is not.
+
+    CODE cells only, same as the Python reader -- and that is a correction, not a shortcut. The
+    first version of this scanned every cell on the argument that a kill-switch does not stop
+    counting for being written in prose. Measured, that argument cost a false positive immediately:
+    a markdown cell reading `verify=False is bad` fired `self_mute_guard`, because a MENTION of a
+    disable is not a disable. Ward had already decided this question -- `.md` is deliberately
+    absent from `_MUTATION_TEXT_SUFFIX_RX`, so prose is out of scope repo-wide -- and mirroring
+    that standing decision beats inventing a second, narrower one here. A prose cell is a
+    documentation file that happens to live inside a notebook."""
+    if not isinstance(tool_input, dict):
+        return ()
+    path = ""
+    for key in _LOCATION_KEYS:
+        value = tool_input.get(key)
+        if isinstance(value, str) and value:
+            path = value
+            break
+    contents = scan_target_contents(tool_input)
+    if not _NOTEBOOK_FILE_RX.search(path):
+        return contents
+    if isinstance(tool_input.get("new_source"), str):
+        # A single cell: the tool states its own type, so honour it rather than re-deriving one.
+        return contents if tool_input.get("cell_type") == "code" else ()
+    out: list[str] = []
+    for content in contents:
+        cells = _notebook_cell_sources(content, code_only=True)
+        # A document that does not parse as a notebook is scanned as the text it is, rather than
+        # dropped -- declining to read must never become a way to be silent.
+        out.extend(cells if cells else (content,))
+    return tuple(out)
+
+
+def scan_introduced_python(tool_input: dict) -> tuple[str, ...]:
+    """The PYTHON SOURCE a mutation introduces, whatever container it arrives in.
+
+    Three spellings of one act, which the AST checks must not be able to tell apart:
+      * `.py` path            -- the introduced text is already Python;
+      * NotebookEdit          -- `new_source` is one cell's Python (a markdown cell simply fails
+                                 to parse downstream, which is the correct outcome for prose);
+      * `.ipynb` whole Write  -- the content is notebook JSON, so the code cells are read out.
+
+    One owner, because the alternative is a per-check membership test that some future check
+    forgets -- which is exactly how the notebook gap came to exist."""
+    if not isinstance(tool_input, dict):
+        return ()
+    path = ""
+    for key in _LOCATION_KEYS:
+        value = tool_input.get(key)
+        if isinstance(value, str) and value:
+            path = value
+            break
+    if _PY_FILE_RX.search(path):
+        return scan_target_contents(tool_input)
+    if not _NOTEBOOK_FILE_RX.search(path):
+        return ()
+    if isinstance(tool_input.get("new_source"), str):
+        return scan_target_contents(tool_input)
+    cells: list[str] = []
+    for content in scan_target_contents(tool_input):
+        cells.extend(_notebook_cell_sources(content, code_only=True))
+    return tuple(cells)
+
+
 def _ast_introduced_check(node_match: Callable[[ast.AST], Optional[str]]) -> Callable[[dict], Optional[str]]:
     """The shared 'rest' every AST-based check in this module tables against: PreToolUse-only,
-    `.py`-file-gated, introduced-text-only, ward-allow-exempted, first-matching-node wins. Returns
+    Python-source-gated (see `scan_introduced_python` -- a `.py` file, a notebook cell, or the code
+    cells of a whole-notebook write, which must be indistinguishable here or the check is merely a
+    tax on choosing the obvious tool), introduced-text-only, ward-allow-exempted, first-matching-node
+    wins. Returns
     check(event) -> reason string | None. Each caller supplies only its own irreducible
     `node_match` — the one part that's genuinely different per check."""
     def _check(event: dict) -> Optional[str]:
@@ -230,10 +347,7 @@ def _ast_introduced_check(node_match: Callable[[ast.AST], Optional[str]]) -> Cal
         ti = event.get("tool_input")
         if not isinstance(ti, dict):
             return None
-        fp = ti.get("file_path", "")
-        if not isinstance(fp, str) or not _PY_FILE_RX.search(fp):
-            return None
-        for content in scan_target_contents(ti):
+        for content in scan_introduced_python(ti):
             tree, off = _parse_introduced(content)
             if tree is None:
                 continue
@@ -464,12 +578,25 @@ _EDIT_NAMES = frozenset({"Edit", "NotebookEdit"})
 # Every tool that names a path Ward must vet -- the union both path-facing gates below test, as one
 # name rather than a repeated two-clause membership test.
 _PATH_MUTATION_NAMES = _WRITE_NAMES | _EDIT_NAMES
-# The tools whose introduced TEXT `self_mute_guard` and `integrity_suppression_flag` scan. This
-# is deliberately NOT `_WRITE_NAMES | _EDIT_NAMES`: that union carries `NotebookEdit`, and these
-# two checks have never covered it. Named here so the two remain one decision rather than two
-# literals that happen to match -- whether `NotebookEdit` belongs is a scope question, and it
-# should be answered once, here, not by whichever copy someone edits.
-_TEXT_MUTATION_NAMES = frozenset({"Write", "Edit", "MultiEdit"})
+# The tools whose introduced TEXT the mutation checks scan.
+#
+# This used to read `{"Write", "Edit", "MultiEdit"}` with a note that `NotebookEdit` had "never
+# been covered" and that whether it belongs "is a scope question, [to] be answered once, here".
+# ANSWERED, by measuring what the exclusion cost. Nine content rows, one payload each, the same
+# source text spelled three ways:
+#
+#     Write to a.py       8 of 9 FIRE
+#     Write to a.ipynb    0 of 9 fire
+#     NotebookEdit        0 of 9 fire
+#
+# Eight of nine rows were evaded by choosing the notebook spelling of the identical act. That is
+# not a scoping decision, it is a DEFEAT -- the same shape as the Write-vs-Edit one closed
+# alongside it: the table held only while the agent picked a `.py` suffix and a non-notebook tool.
+# `_PATH_MUTATION_NAMES` and `_cannot_evaluate` already knew `NotebookEdit` and `notebook_path`,
+# so notebooks were half-wired: the path half saw them and the content half did not.
+#
+# The rule now is one sentence: Python source is Python source, whatever container it arrives in.
+_TEXT_MUTATION_NAMES = _WRITE_NAMES | _EDIT_NAMES
 _LOCATION_KEYS = ("file_path", "notebook_path")
 _WINDOWS_DRIVE_RELATIVE_RX = re.compile(r"^[A-Za-z]:(?:$|[^/\\])")
 
@@ -748,8 +875,15 @@ def _text_mutation_input(event: dict) -> Optional[dict]:
     ti = event.get("tool_input")
     if not isinstance(ti, dict):
         return None
-    path = ti.get("file_path", "")
-    if not isinstance(path, str) or not _MUTATION_TEXT_SUFFIX_RX.search(path):
+    # Both spellings of "which file", for the same reason the tool set above is a union: reading
+    # only `file_path` let a NotebookEdit pass every other gate and then match no path at all.
+    path = ""
+    for key in _LOCATION_KEYS:
+        value = ti.get(key)
+        if isinstance(value, str) and value:
+            path = value
+            break
+    if not _MUTATION_TEXT_SUFFIX_RX.search(path):
         return None
     return ti
 
@@ -821,7 +955,7 @@ def self_mute_guard(event: dict) -> Optional[str]:
     ti = _text_mutation_input(event)
     if ti is None:
         return None
-    introduced_parts = scan_target_contents(ti)
+    introduced_parts = scan_introduced_text(ti)
     introduced = "\n".join(introduced_parts)
     disabled = _DISABLED_CHECK_RX.search(introduced)
     if disabled:
@@ -862,7 +996,7 @@ def integrity_suppression_flag(event: dict) -> Optional[str]:
     ti = _text_mutation_input(event)
     if ti is None:
         return None
-    for content in scan_target_contents(ti):
+    for content in scan_introduced_text(ti):
         flag = _INTEGRITY_FLAG_RX.search(content)
         if flag:
             return f"introduces an integrity suppression flag ({flag.group(0).strip()!r})"
