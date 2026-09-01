@@ -757,7 +757,19 @@ def _text_mutation_input(event: dict) -> Optional[dict]:
 # --- ward.self_mute_guard -----------------------------------------------------------------------
 # Ported by shape from Makoto's makoto/checks/selfMuteGuard.py.  Makoto protects its particular
 # settings hook; Ward translates the same removed-vs-introduced predicate to the pending source
-# mutation itself, without reading the target or consulting history.
+# mutation itself, without consulting history.
+#
+# AMENDED, and the amendment is the point: this comment used to read "without reading the target",
+# and that stated property was a DEFEAT rather than a boundary. Measured -- same file, same
+# verifier, same removal:
+#
+#     Edit  (old_string -> new_string dropping `verify_signature`)   DENIED
+#     Write (whole-file content dropping `verify_signature`)         ALLOWED
+#
+# An agent had only to choose the other tool. A Write ships no prior text at all, so the removed
+# side was structurally empty for it and the symbol half of this predicate could never run. The
+# target file is the only witness to what a whole-file Write destroys, so `_removed_contents`
+# reads it -- bounded, and only for that one branch.
 _CHECK_WORD = r"(?:audit|verif(?:y|ier|ication)?|integrit(?:y|ies)|attest|checksum|signature|tamper|provenance)"
 _CHECK_SYMBOL_RX = re.compile(
     rf"(?i)\b(?:def\s+)?([A-Za-z_]\w*{_CHECK_WORD}\w*|{_CHECK_WORD}[A-Za-z_]\w*)\s*(?=\()"
@@ -767,7 +779,24 @@ _DISABLED_CHECK_RX = re.compile(
 )
 
 
+# Bounds the one branch below that touches the filesystem. A hook runs inside somebody's tool
+# call, so the read is capped rather than trusted to be small.
+_WRITE_PRIOR_READ_MAX = 1 << 20  # 1 MiB
+
+
 def _removed_contents(tool_input: dict) -> tuple[str, ...]:
+    """The text this mutation REMOVES -- Edit's `old_string`, MultiEdit's `old_string`s, or, for a
+    whole-file Write, the target's current contents read from disk.
+
+    The Write branch exists because a Write carries no prior text in its payload, which made the
+    symbol half of `self_mute_guard` unreachable for it: see the measured Edit/Write asymmetry in
+    this section's header comment.
+
+    It is bounded so that reading can only ever add a denial this function can PROVE, never remove
+    one the payload branches would have made: a path that does not exist removes nothing (a Write
+    that CREATES a file is not a removal), and an unreadable or oversized target yields no removed
+    text rather than a guess. `evaluate` runs `ward.forbidden_location` first and returns on the
+    first fire, so a path outside the working-directory policy is denied before this reads it."""
     old = tool_input.get("old_string")
     if isinstance(old, str) and old:
         return (old,)
@@ -775,6 +804,15 @@ def _removed_contents(tool_input: dict) -> tuple[str, ...]:
     if isinstance(edits, list):
         return tuple(edit.get("old_string", "") for edit in edits
                      if isinstance(edit, dict) and isinstance(edit.get("old_string"), str))
+    if isinstance(tool_input.get("content"), str):
+        path = tool_input.get("file_path")
+        if isinstance(path, str) and path:
+            try:
+                target = Path(path)
+                if target.is_file() and target.stat().st_size <= _WRITE_PRIOR_READ_MAX:
+                    return (target.read_text(encoding="utf-8", errors="replace"),)
+            except OSError:
+                return ()
     return ()
 
 
