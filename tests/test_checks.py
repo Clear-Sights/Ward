@@ -270,6 +270,15 @@ def _test_cert_none_mode_fires_on_annotated_assignment():
     _ck(fired is not None and fired[0] == "ward.cert_none_mode")
 
 
+def _test_cert_none_mode_fires_on_the_literal_zero():
+    # `ssl.CERT_NONE == 0`: the integer is the same runtime value under another spelling (WM-05).
+    fired = evaluate(_write("ctx.verify_mode = 0\n"))
+    _ck(fired is not None and fired[0] == "ward.cert_none_mode")
+    fired = evaluate(_write("ssl.wrap_socket(sock, cert_reqs=0)\n"))
+    _ck(fired is not None and fired[0] == "ward.cert_reqs_none")
+    _ck(evaluate(_write("ctx.verify_mode = False\n")) is None, "a bool is not the spelling")
+
+
 def _test_cert_none_mode_clean_on_comparison():
     # `if mode == CERT_NONE:` is a comparison, not an assignment — must stay silent (FP guard)
     _ck(evaluate(_write("if mode == ssl.CERT_NONE:\n    pass\n")) is None)
@@ -346,6 +355,29 @@ def _test_self_mute_guard_negative_plant_depends_on_removed_input():
     _ck(evaluate(event) is not None, "planted removal must exercise the check")
     event["tool_input"]["old_string"] = "result = old_value\n"
     _ck(evaluate(event) is None, "removing the planted check input must remove the denial")
+
+
+def _test_credential_neighbour_spelling_is_the_same_object():
+    # `.netrc.bak` then `mv`, `.bashrc.local`, `id_rsa~`: the stem names the object (WM-06).
+    for path, arm in ((".netrc.bak", "credential-basename"), (".bashrc.local", "shell-rc"),
+                      ("id_rsa~", "credential-basename"), ("credentials_new", "credential-basename")):
+        fired = evaluate(_pre("Write", {"file_path": f"/workspace/repo/{path}", "content": "x"}))
+        _ck(fired is not None and arm in (fired[1] if len(fired) > 1 else str(fired)), f"{path}: {fired}")
+    _ck(evaluate(_pre("Write", {"file_path": "/workspace/repo/id_rsa.pub", "content": "x"})) is None,
+        "the public half is not a credential")
+    _ck(evaluate(_pre("Write", {"file_path": "/workspace/repo/netrc_parser.py", "content": "x"})) is None,
+        "a different stem is a different object")
+
+
+def _test_check_word_covers_check_and_validate():
+    # `check` and `validat` are the plain spellings of the act the mutation checks guard (WM-07).
+    event = _pre("Edit", {"file_path": "/workspace/repo/policy.py",
+                          "old_string": "result = check_signature(payload)\n", "new_string": "result = True\n"})
+    _ck(evaluate(event) is not None, "removing check_signature must fire")
+    event = _write("checks_enabled = false\n", file_path="/workspace/repo/policy.toml")
+    _ck(evaluate(event) is not None, "a disabled check flag must fire")
+    event = _write("validation_enabled = 0\n", file_path="/workspace/repo/policy.toml")
+    _ck(evaluate(event) is not None, "a disabled validation flag must fire")
 
 
 # --- integrity_suppression_flag ------------------------------------------------------------------
