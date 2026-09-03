@@ -9,7 +9,8 @@ import re
 import subprocess
 import sys
 
-from measure import derailment_partition, derailment_rules, check_count, contiguous_count, corpus_counts, suite_count
+from measure import (child_env, derailment_partition, derailment_rules, check_count,
+                     contiguous_count, corpus_counts, suite_count)
 
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -18,7 +19,7 @@ README = ROOT / "README.md"
 
 def replay_result() -> tuple[int, int]:
     proc = subprocess.run([sys.executable, "eval/replay.py"], cwd=ROOT,
-                          text=True, capture_output=True)
+                          text=True, capture_output=True, env=child_env())
     match = re.search(r"REPLAY sessions=(\d+) passed=(\d+) failed=(\d+)", proc.stdout)
     if proc.returncode or not match:
         raise RuntimeError("eval/replay.py did not produce a passing REPLAY summary")

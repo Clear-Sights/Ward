@@ -3,7 +3,10 @@ from pathlib import Path
 import json
 import os
 import re
+import sys
+import tempfile
 import unittest
+from unittest import mock
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -106,3 +109,75 @@ class ManifestsAgreeWithTheTree(unittest.TestCase):
                          f"marketplace entry for {plugin['name']!r} must source the plugin subtree")
         self.assertTrue((REPO / "plugin" / ".claude-plugin" / "plugin.json").is_file(),
                         "the sourced subtree must be the one carrying plugin.json")
+
+
+class MeasurementProvenance(unittest.TestCase):
+    """Whether a rendered README number is evidence about THIS tree.
+
+    `ImportProvenance` above settles the suite's own imports. It says nothing about the
+    measurement tools, which reach the code a second way: `tools/measure.py` and
+    `tools/render_readme_claims.py` SPAWN the suite and the replay as subprocesses. Those
+    children inherited the caller's environment unpinned, so `import ward` inside them resolved
+    to whatever `ward` that environment held -- an installed sibling package, a stale editable
+    `.pth`, another checkout -- and the count that came back was rendered into README.md as this
+    repository's evidence while describing other bytes. With no `ward` importable at all the same
+    omission surfaced only as `RuntimeError: unit suite did not produce a passing test count`,
+    which names the symptom and not the cause.
+
+    This grades the pin rather than the tools' happy path: a decoy `ward` package is placed FIRST
+    on `PYTHONPATH` and the measurement must still report this checkout's numbers. Prepending is
+    what is being asserted -- a merely appended `plugin/` would fill in for an absent `ward` and
+    still lose to the decoy, passing a weaker check that reads the same. Witnessed, not assumed:
+    with `child_env` appending instead of prepending, this class reports `FAILED (errors=1)`.
+
+    ONE cell, not two, and the missing one is stated rather than quietly dropped. Only the suite
+    measurement was ever exposed: `eval/replay.py` spawns `python -m ward.dispatch` with
+    `cwd=plugin/`, so the current directory already resolves `ward` to this checkout ahead of any
+    inherited `PYTHONPATH`, and a decoy cannot reach it. A replay cell here would have passed
+    against the pinned AND the unpinned tool -- a check that cannot fail is not evidence, so it
+    is not shipped. `render_readme_claims.py` still passes `child_env()` to that subprocess for
+    uniformity; that is defence in depth, not a defect closed.
+    """
+
+    def setUp(self):
+        # A measurement spawns the suite and the suite calls a measurement. `measure.child_env`
+        # sets this marker in every child, which bounds that nesting at depth one. The cell is
+        # not weakened by it: the ordinary top-level run has no marker and grades in full.
+        if os.environ.get("WARD_MEASUREMENT_CHILD"):
+            self.skipTest("already inside a spawned measurement; the top-level run grades this")
+
+    def _decoy(self) -> str:
+        directory = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        package = directory / "ward"
+        package.mkdir()
+        (package / "__init__.py").write_text("", encoding="utf-8")
+        (package / "checks.py").write_text("CHECKS = []\ndef evaluate(event):\n    return None\n",
+                                           encoding="utf-8")
+        return str(directory)
+
+    def _under_decoy(self, attribute: str):
+        """Call `measure.<attribute>()` with a decoy `ward` first on the child's PYTHONPATH.
+
+        `tools/` is put on `sys.path` here rather than at module import: the module under
+        measurement is a script directory, not an installed package, and importing it at module
+        scope would make this whole file unimportable wherever that directory is absent.
+        """
+        sys.path.insert(0, str(REPO / "tools"))
+        try:
+            import measure
+            with mock.patch.dict(os.environ, {"PYTHONPATH": self._decoy()}):
+                return getattr(measure, attribute)()
+        finally:
+            sys.path.remove(str(REPO / "tools"))
+
+    def test_the_suite_count_measures_this_checkout_not_an_inherited_ward(self):
+        counted = self._under_decoy("suite_count")
+        # Not merely "nonzero": the decoy makes the real suite unrunnable, so the unpinned
+        # failure mode is a raise, and the number is pinned to the count this tree's own
+        # discovery reports rather than to any number that happens to arrive.
+        self.assertEqual(counted, self._discovered(),
+                         "measure.suite_count graded a ward that is not this checkout's")
+
+    def _discovered(self) -> int:
+        loaded = unittest.defaultTestLoader.discover(str(REPO / "tests"), top_level_dir=str(REPO))
+        return loaded.countTestCases()
