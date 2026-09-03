@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -12,10 +13,39 @@ import sys
 
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+PLUGIN = ROOT / "plugin"
+
+
+def child_env() -> dict[str, str]:
+    """The environment for every subprocess these tools measure through.
+
+    `checks()` below pins `plugin/` onto `sys.path` for its own in-process reads, but the
+    subprocess measurements did not pin anything: they inherited the caller's environment, so
+    `import ward` inside the child resolved to whatever `ward` that environment already had --
+    an installed sibling package, a stale editable install, an unrelated checkout. The number
+    that came back was then rendered into README.md as this repository's evidence while
+    describing other bytes, and with no `ward` importable at all the same omission surfaced as
+    the bare `RuntimeError: unit suite did not produce a passing test count`, which names the
+    symptom and not the cause. The half-pin is the bug: one half of this file graded the
+    repository and the other half graded the environment.
+
+    `plugin/` is PREPENDED, not appended, so it wins over an inherited entry rather than only
+    filling in for an absent one -- an appended path would still let a sibling `ward` grade.
+    """
+    env = dict(os.environ)
+    # A measurement spawns the suite, and the suite contains cells that call a measurement. The
+    # marker makes that nesting terminate at depth one: a spawned child sees it and skips those
+    # cells instead of spawning again. It bounds recursion only -- it never relaxes a check, and
+    # the cells it stands down still run in full in the ordinary top-level suite, which is where
+    # they are graded.
+    env["WARD_MEASUREMENT_CHILD"] = "1"
+    inherited = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{PLUGIN}{os.pathsep}{inherited}" if inherited else str(PLUGIN)
+    return env
 
 
 def checks() -> list[tuple[str, str, str]]:
-    sys.path.insert(0, str(ROOT / "plugin"))
+    sys.path.insert(0, str(PLUGIN))
     from ward.checks import CHECKS
     return CHECKS
 
@@ -64,7 +94,7 @@ def contiguous_count() -> int:
 def suite_count() -> int:
     proc = subprocess.run(
         [sys.executable, "-m", "unittest", "discover", "-s", "tests"],
-        cwd=ROOT, text=True, capture_output=True,
+        cwd=ROOT, text=True, capture_output=True, env=child_env(),
     )
     output = proc.stdout + proc.stderr
     match = re.search(r"^Ran (\d+) tests? in ", output, re.MULTILINE)
@@ -134,7 +164,7 @@ def derailment_rules() -> list[str]:
 
 
 def run(command: list[str], *, cwd: pathlib.Path = ROOT, input_text: str | None = None) -> int:
-    return subprocess.run(command, cwd=cwd, input=input_text, text=True,
+    return subprocess.run(command, cwd=cwd, input=input_text, text=True, env=child_env(),
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
 
 
