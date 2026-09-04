@@ -187,7 +187,7 @@ it does not judge statements, sequences, intent, or post-execution outcomes.
 - The outbound row checks the serialized payload of MCP, WebFetch, and WebSearch calls against five
   raw credential grammars. It is not a general secret scanner and does not decode transformed
   values.
-- `{}` means only that no exact predicate matched. It is not approval, a safety verdict, or proof
+- `{}` means only that no deny row's predicate matched (`plugin/ward/checks.py` defines both words). It is not approval, a safety verdict, or proof
   about the later filesystem or network operation.
 
 The full boundary and one named reachable bypass for every row are documented in

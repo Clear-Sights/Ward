@@ -6,6 +6,12 @@ denies, ported by SHAPE (never imported — copy, never a cross-repo dependency)
 Makoto (10), unified here because they share one real MECHANISM, not a domain: PreToolUse BLOCK,
 exact predicate, no judgment, no softer tier.
 
+A PREDICATE is the whole match rule of ONE deny row: the test that row applies to an
+event, owned by that row and by nothing else. The seven `_*_node_match` helpers below
+are AST-level parts a predicate is built from, never predicates in their own right and
+never rows; `render_readme_claims.py`'s "keep new predicates narrow" is about this
+sense. No other artifact defines the word.
+
 Design principle (owner correction, 2026-07-13): don't keep a whole check monolithic because ONE
 part of it needs bespoke logic — separate the irreducible sliver from the rest, and TABLE the
 rest. 7 of these 11 checks share one AST-introduced-scan scaffold (`_ast_introduced_check`); each
