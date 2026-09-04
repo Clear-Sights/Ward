@@ -179,7 +179,7 @@ def is_false_const(node) -> bool:
 def is_cert_none(node) -> bool:
     """True iff `node` is `ssl.CERT_NONE` (an Attribute), a bare `CERT_NONE` Name, or the literal
     `0` -- which IS `ssl.CERT_NONE` at runtime (`VerifyMode.CERT_NONE == 0`), so `verify_mode = 0`
-    disables verification byte-for-byte the same way and used to pass unseen (WM-05). Bool is
+    disables verification byte-for-byte the same way and used to pass unseen. Bool is
     excluded: `False` is not the spelling anyone writes for a verify mode, and `is False` has its
     own check."""
     if isinstance(node, ast.Attribute) and node.attr == "CERT_NONE":
@@ -797,8 +797,8 @@ def _location_reason(name: str, file_path: str, cwd: str) -> Optional[str]:
 
     # A NEIGHBOURING SPELLING OF THE SAME OBJECT is the same object: `.netrc.bak` then `mv`,
     # `.bashrc.local` sourced by the listed rc, `id_rsa~`. The set names the stem; a basename
-    # that IS a member or extends one across a `.`, `-`, `_` or `~` boundary is in the arm
-    # (WM-06). Stated allowance: a public half of a key pair (`id_*.pub`) is not a credential.
+    # that IS a member or extends one across a `.`, `-`, `_` or `~` boundary is in the arm.
+    # Stated allowance: a public half of a key pair (`id_*.pub`) is not a credential.
     stem_rc = _stem_in(basename, _SHELL_RC_BASENAMES)
     if stem_rc:
         return f"shell-rc: target basename {basename!r} is a shell startup file ({stem_rc})"
@@ -930,7 +930,7 @@ def _text_mutation_input(event: dict) -> Optional[dict]:
 # target file is the only witness to what a whole-file Write destroys, so `_removed_contents`
 # reads it -- bounded, and only for that one branch.
 # `check` itself was absent -- only `checksum` -- so `def check_signature()` removed, or
-# `checks_enabled = False`, never fired (WM-07). `validat` is the other spelling of the same act.
+# `checks_enabled = False`, never fired. `validat` is the other spelling of the same act.
 _CHECK_WORD = r"(?:audit|verif(?:y|ier|ication)?|integrit(?:y|ies)|attest|check(?:s|ed|ing|er)?|validat(?:e|ion|or)|signature|tamper|provenance)"
 _CHECK_SYMBOL_RX = re.compile(
     rf"(?i)\b(?:def\s+)?([A-Za-z_]\w*{_CHECK_WORD}\w*|{_CHECK_WORD}[A-Za-z_]\w*)\s*(?=\()"
