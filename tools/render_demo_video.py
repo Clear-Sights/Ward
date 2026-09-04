@@ -103,7 +103,7 @@ SCENES = (
     ),
     Scene(
         "Edit app.py: a = a + 1",
-        "{}  · no opinion — Ward only speaks for its 11 rows.",
+        f"{{}}  · no opinion — Ward only speaks for its {len(CHECKS)} rows.",
         2.0,
         False,
     ),
