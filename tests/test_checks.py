@@ -271,7 +271,7 @@ def _test_cert_none_mode_fires_on_annotated_assignment():
 
 
 def _test_cert_none_mode_fires_on_the_literal_zero():
-    # `ssl.CERT_NONE == 0`: the integer is the same runtime value under another spelling (WM-05).
+    # `ssl.CERT_NONE == 0`: the integer is the same runtime value under another spelling.
     fired = evaluate(_write("ctx.verify_mode = 0\n"))
     _ck(fired is not None and fired[0] == "ward.cert_none_mode")
     fired = evaluate(_write("ssl.wrap_socket(sock, cert_reqs=0)\n"))
@@ -358,7 +358,7 @@ def _test_self_mute_guard_negative_plant_depends_on_removed_input():
 
 
 def _test_credential_neighbour_spelling_is_the_same_object():
-    # `.netrc.bak` then `mv`, `.bashrc.local`, `id_rsa~`: the stem names the object (WM-06).
+    # `.netrc.bak` then `mv`, `.bashrc.local`, `id_rsa~`: the stem names the object.
     for path, arm in ((".netrc.bak", "credential-basename"), (".bashrc.local", "shell-rc"),
                       ("id_rsa~", "credential-basename"), ("credentials_new", "credential-basename")):
         fired = evaluate(_pre("Write", {"file_path": f"/workspace/repo/{path}", "content": "x"}))
@@ -370,7 +370,7 @@ def _test_credential_neighbour_spelling_is_the_same_object():
 
 
 def _test_check_word_covers_check_and_validate():
-    # `check` and `validat` are the plain spellings of the act the mutation checks guard (WM-07).
+    # `check` and `validat` are the plain spellings of the act the mutation checks guard.
     event = _pre("Edit", {"file_path": "/workspace/repo/policy.py",
                           "old_string": "result = check_signature(payload)\n", "new_string": "result = True\n"})
     _ck(evaluate(event) is not None, "removing check_signature must fire")

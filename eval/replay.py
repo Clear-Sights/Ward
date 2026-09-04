@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Replay recorded sessions through the hook and show where it fires.
 
-Each corpus file is one session: a JSON header line, then hook events in order.
+Each corpus file records ONE session in the same sense `plugin/ward/journal.py` uses the
+word -- one run the host gave a single session id, the unit its `session` row proves Ward
+saw. Here that run is replayed from a file rather than observed live: a JSON header line,
+then hook events in order.
 The header names the event where the real pattern derailed (`derails_at`, 0-based
 index into the events). The claim under test is narrow and mechanical:
 

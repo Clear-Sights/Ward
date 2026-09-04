@@ -2,23 +2,23 @@
 
 ## Guarantee
 
-Ward is a policy filter over a `PreToolUse` event. When a Ward predicate returns a deny and the
+Ward is a policy filter over a `PreToolUse` event. When a Ward row returns a deny and the
 Claude Code host honors it, that submitted tool call is canceled. When Ward returns no finding, the
-only conclusion is that the inspected JSON event matched none of Ward's predicates.
+only conclusion is that the inspected JSON event matched none of Ward's rows.
 
 Ward is **not a filesystem confinement boundary or reference monitor**:
 
 - `forbidden_location` lexically normalizes the path string and compares it with the event's `cwd`.
   It does not resolve symlinks, inspect mounts, or open the target.
 - The writer resolves the pathname separately after Ward returns, when filesystem state may differ.
-- Other write routes and kernel filesystem operations are outside this predicate.
+- Other write routes and kernel filesystem operations are outside this row.
 
 An allowed event therefore does not prove that the later write will land inside `cwd`.
 
-## Named non-claims for the eleven exact predicates
+## Named non-claims for the exact deny rows
 
 Each identifier below names an observed bypass that Ward deliberately does not claim to catch. An
-allow for one of these shapes means only that no exact Ward predicate matched; it is never a safety
+allow for one of these shapes means only that no exact Ward row matched; it is never a safety
 verdict.
 
 - `forbidden_location.symlink_resolution`: an in-cwd lexical pathname can resolve outside `cwd`

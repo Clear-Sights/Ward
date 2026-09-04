@@ -54,6 +54,15 @@ jobs:
           fi
           echo "Unit suite passed: $ran tests ran."
           echo "ran=$ran" >> "$GITHUB_OUTPUT"
+          # THE DENY TABLE'S SIZE, from its one owner. The release note used to state this as a
+          # digit; `tools/measure.py check-count` is `len(CHECKS)`, the same source the README's
+          # generated blocks read, so the note cannot outlive a row being added or removed.
+          rows=$(python3 tools/measure.py check-count)
+          if [ -z "$rows" ] || [ "$rows" -eq 0 ]; then
+            echo "The deny table reported no rows. A table that grades nothing is not a table."
+            exit 1
+          fi
+          echo "rows=$rows" >> "$GITHUB_OUTPUT"
           # THE REPLAY'S OWN DENOMINATOR, carried forward. The release notes used to state a
           # hard-coded "6/6 corpus replay" and an "82-test suite"; the corpus had grown to 13
           # sessions and the suite to over 130, so every release published two false numbers
@@ -122,5 +131,5 @@ jobs:
           git push origin "$TAG"
           gh release create "$TAG" \
             --title "$TAG" \
-            --notes "Stateless PreToolUse deny table: 11 predicate rows plus a cannot-evaluate preflight, every denial cited and carrying a retry hint. Verified at release time: the ${{ steps.gates.outputs.ran }}-test suite and the ${{ steps.gates.outputs.replay_passed }}/${{ steps.gates.outputs.replay_sessions }} corpus replay (\`python3 eval/replay.py\`). Install from \`ward-$VERSION.zip\` — it carries the dispatcher, hooks, and manifests only; the eval corpus and tests live in the repository, not the release bundle." \
+            --notes "Stateless PreToolUse deny table: ${{ steps.gates.outputs.rows }} predicate rows plus a cannot-evaluate preflight, every denial cited and carrying a retry hint. Verified at release time: the ${{ steps.gates.outputs.ran }}-test suite and the ${{ steps.gates.outputs.replay_passed }}/${{ steps.gates.outputs.replay_sessions }} corpus replay (\`python3 eval/replay.py\`). Install from \`ward-$VERSION.zip\` — it carries the dispatcher, hooks, and manifests only; the eval corpus and tests live in the repository, not the release bundle." \
             "ward-$VERSION.zip"
