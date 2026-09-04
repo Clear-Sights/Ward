@@ -93,9 +93,10 @@ checks is an unconditional hard block"). *Shape* carries two terms of art and an
 sense, all three fixed in [plugin/ward/checks.py](plugin/ward/checks.py): *ported by shape* means
 reimplemented from another project's form rather than imported, used wherever this repository
 describes a port; a *shared shape* is an abstraction two checks would have to fake to be tabled
-together. Otherwise the adjoining noun fixes it -- a protocol shape below is one of the two JSON
-forms Ward emits, a callable shape is a function's body and signature, a bypass shape in
-[SECURITY.md](SECURITY.md) is a scenario.
+together. Otherwise it is ordinary English for the form of whatever is under discussion, fixed by
+context -- usually the noun beside it, as with a protocol shape below (one of the two JSON forms
+Ward emits) or a callable shape (a function's body and signature); sometimes the surrounding
+sentence, as with the bypass shapes [SECURITY.md](SECURITY.md) enumerates.
 
 Evaluate coverage here, not only in [Scope, precisely](#scope-precisely): NotebookEdit receives the
 `ward.forbidden_location` path check, but its cell text is **not** parsed by the seven

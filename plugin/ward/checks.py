@@ -7,16 +7,19 @@ dependency). That is a term of art and it is used wherever a port is described -
 `wire.py`, `plugin/hooks/dispatch.sh`, `tests/test_dispatch_shim.py`, and the row banners
 below. A SHARED SHAPE is a second term of art, for an abstraction two checks would have to
 fake to be tabled together (see the AST-scaffold argument above). Every other use is
-ordinary English fixed by the noun beside it. From Detent (1) and
+ordinary English -- "the form of the thing under discussion" -- fixed by its context.
+Usually that is the noun beside it (callable shape, protocol shape, payload shape); a few
+elide the noun and take it from the sentence around them. From Detent (1) and
 Makoto (10), unified here because they share one real MECHANISM, not a domain: PreToolUse BLOCK,
 exact predicate, no judgment, no softer tier.
 
-A PREDICATE is a match rule: a test applied to an event or a node, returning whether it
-matches. Two levels use the word and both are legitimate. A ROW predicate is the whole
-rule one deny row applies to an event, owned by that row. A NODE-MATCH predicate is one
-of the seven `_*_node_match` helpers below, or a component test like `_is_world_tool` --
-parts a row predicate is built from, never rows themselves. Where the level matters the
-text says which; bare "predicate" means the row level. No other artifact defines it.
+A PREDICATE is a match rule: a test over some value -- an event, an AST node, a tool name,
+a payload field -- returning whether it matches. Two levels use the word and both are
+legitimate. A ROW predicate is the whole rule one deny row applies to an event, owned by
+that row. A COMPONENT predicate is a part a row predicate is built from and never a row
+itself: the seven `_*_node_match` helpers below, and tests like `_is_world_tool`. Where
+the level matters the text says which; bare "predicate" means the row level, except at
+`_is_world_tool`'s own definition and docstring. No other artifact defines it.
 
 Design principle (owner correction, 2026-07-13): don't keep a whole check monolithic because ONE
 part of it needs bespoke logic — separate the irreducible sliver from the rest, and TABLE the
