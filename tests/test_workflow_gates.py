@@ -164,6 +164,12 @@ class NoWorkflowPublishesANumberItDidNotMeasure(unittest.TestCase):
     COUNTED = (
         (re.compile(_TOKEN + r"-test suite"), "the suite size"),
         (re.compile(_TOKEN + r"/" + _TOKEN + r" corpus replay"), "the corpus replay denominator"),
+        # THE TABLE'S OWN SIZE, which escaped this law for the reason the law exists. The release
+        # note published "11 predicate rows" as a digit in the SAME string as the two expressions
+        # above, and passed -- not because the count was read from a run, but because "predicate
+        # rows" was not one of the two phrases listed here. The rule in the docstring already
+        # covered it; the pattern list did not. `tools/measure.py check-count` is the one owner.
+        (re.compile(_TOKEN + r" predicate rows"), "the deny table's size"),
     )
     FROM_A_STEP = re.compile(r"\$\{\{\s*steps\.([\w-]+)\.outputs\.([\w-]+)\s*\}\}")
 
