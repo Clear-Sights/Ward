@@ -120,17 +120,20 @@ silent.
 
 ## What Ward writes down
 
+Journal rows are not table rows: everywhere above, a *row* is an entry in the `CHECKS` deny table;
+in this section it is a line in the log. The two are counted separately and never correspond.
+
 `plugin/ward/journal.py` appends to `decisions.jsonl` under `$WARD_STATE_DIR` (default
-`~/.claude/ward_state`): one `session` row the first time a session is seen — carrying the loaded
-check count, so the log proves Ward *ran* separately from whether it *caught* anything — plus one
-row per `deny`, per `fault`, and per repaired envelope. There is deliberately no row per allowed
-call.
+`~/.claude/ward_state`): one `session` journal row the first time a session is seen — carrying the
+loaded check count, so the log proves Ward *ran* separately from whether it *caught* anything —
+plus one journal row per `deny`, per `fault`, and per repaired envelope. There is deliberately no
+journal row per allowed call.
 
-Every row names `plugin`, `session_id` and `tool_name`, and every deny reason on the wire is
-prefixed `ward.<check_id>`. Ward is not the only plugin registering `PreToolUse` `*`, and the host
-shows the user a reason but never a source.
+Every journal row names `plugin`, `session_id` and `tool_name`, and every deny reason on the wire
+is prefixed `ward.<check_id>`. Ward is not the only plugin registering `PreToolUse` `*`, and the
+host shows the user a reason but never a source.
 
-`fault` rows carry `failed_closed`, which makes the bench-wide fail-direction policy checkable
+`fault` journal rows carry `failed_closed`, which makes the bench-wide fail-direction policy checkable
 against the record rather than against prose. Ward's answer is always `true`; see
 [Courthouse docs/FAIL-DIRECTION.md](https://github.com/Clear-Sights/Courthouse/blob/main/docs/FAIL-DIRECTION.md)
 for why the axis a plugin judges — not its taste — decides its direction.

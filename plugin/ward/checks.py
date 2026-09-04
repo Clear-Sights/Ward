@@ -598,14 +598,17 @@ _PATH_MUTATION_NAMES = _WRITE_NAMES | _EDIT_NAMES
 #
 # This used to read `{"Write", "Edit", "MultiEdit"}` with a note that `NotebookEdit` had "never
 # been covered" and that whether it belongs "is a scope question, [to] be answered once, here".
-# ANSWERED, by measuring what the exclusion cost. Nine content rows, one payload each, the same
-# source text spelled three ways:
+# ANSWERED, by measuring what the exclusion cost. The denominator below is the table AS IT STOOD
+# AT THAT MEASUREMENT -- nine content-reading rows then, against eleven rows now. It is quoted
+# here as history and is deliberately not restated against the current table, which would be a
+# second, wrong measurement. Nine content rows, one payload each, the same source text spelled
+# three ways:
 #
 #     Write to a.py       8 of 9 FIRE
 #     Write to a.ipynb    0 of 9 fire
 #     NotebookEdit        0 of 9 fire
 #
-# Eight of nine rows were evaded by choosing the notebook spelling of the identical act. That is
+# Eight of those nine rows were evaded by choosing the notebook spelling of the identical act. That is
 # not a scoping decision, it is a DEFEAT -- the same shape as the Write-vs-Edit one closed
 # alongside it: the table held only while the agent picked a `.py` suffix and a non-notebook tool.
 # `_PATH_MUTATION_NAMES` and `_cannot_evaluate` already knew `NotebookEdit` and `notebook_path`,
