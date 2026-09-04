@@ -2,7 +2,9 @@
 
 Not sincerity (Makoto: is the agent's claim honest) and not determination (Detent: is this
 acquisition/transport deterministic) — a safety axis. 11 exact, no-substitute, PreToolUse hard
-denies, ported by SHAPE (never imported — copy, never a cross-repo dependency) from Detent (1) and
+denies, ported by SHAPE -- this phrase only: the form was reimplemented here, not imported
+(never a cross-repo dependency). Elsewhere "shape" carries its ordinary sense, fixed by the
+noun beside it (protocol shape, callable shape, bypass shape); README says so. From Detent (1) and
 Makoto (10), unified here because they share one real MECHANISM, not a domain: PreToolUse BLOCK,
 exact predicate, no judgment, no softer tier.
 
@@ -654,7 +656,8 @@ def _cannot_evaluate(event: dict[str, Any]) -> Optional[str]:
     A missing path used to make both the lexical path check and every AST check silently skip a
     Write/Edit.  That is not a clean result: Ward has lost the information needed to decide
     whether the pending mutation is safe.  Keep this preflight outside ``CHECKS`` so the eleven
-    substantive predicates remain the advertised table; this is the dispatcher-facing failure
+    substantive predicates remain the advertised table (`CHECKS` itself: the rows README
+    publishes and counts, and the only population any count claim in this repository means); this is the dispatcher-facing failure
     direction for an event those predicates cannot be evaluated against.
     """
     if event.get("hook_event_name") != "PreToolUse":

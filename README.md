@@ -80,6 +80,20 @@ The 7 rows from `ward.timing_unsafe_compare` through
 4 use path text, serialized outbound payloads, or introduced-versus-removed mutation text.
 <!-- END GENERATED contiguous-checks -->
 
+**Three words in the rows above, each owned in one place.** A *supported* source, configuration,
+or shell-file mutation is one whose path matches `_MUTATION_TEXT_SUFFIX_RX`
+(`plugin/ward/checks.py`) -- `.py`, `.toml`, `.yaml`/`.yml`, `.json`, `.ini`, `.cfg`, `.conf`,
+`.sh`, `.bash`, `.zsh`, `.ipynb` -- reached through `_text_mutation_input`, which is the whole
+gate `ward.self_mute_guard` and `ward.integrity_suppression_flag` share. Nothing else is
+supported, and the pair widens together or not at all.
+
+A *check* in a row description is one in the code being edited -- the subject's verifier -- never
+a row of this table; `plugin/ward/dispatch.py` owns the table sense ("every one of these 11
+checks is an unconditional hard block"). A *shape* is whatever its adjoining noun says: a
+protocol shape below is one of the two JSON forms Ward emits, a callable shape is a function's
+body and signature, a bypass shape in [SECURITY.md](SECURITY.md) is a scenario. Only
+`plugin/ward/checks.py`'s "ported by SHAPE" is a term of art, and it is scoped there.
+
 Evaluate coverage here, not only in [Scope, precisely](#scope-precisely): NotebookEdit receives the
 `ward.forbidden_location` path check, but its cell text is **not** parsed by the seven
 introduced-Python rows.

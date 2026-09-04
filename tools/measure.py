@@ -133,6 +133,12 @@ def derailment_partition() -> tuple[int, list[str]]:
     corpus no longer covers -- which is the condition the summary asserts.
 
     `checks()` names carry the `ward.` prefix; `derailment_rules()` names do not.
+
+    The non-table half is not a leftover category: it is the preflight as
+    `plugin/ward/checks.py` defines it -- the input-adequacy gate held outside `CHECKS` on
+    purpose. Membership is computed here by residue, but the residue is expected to BE
+    that gate, so a session derailing on anything else would show up as an unexplained
+    member rather than as a silent third class.
     """
     table = {name for name, *_ in checks()}
     derailing = [f"ward.{rule}" for rule in derailment_rules()]
