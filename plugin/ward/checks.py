@@ -2,17 +2,21 @@
 
 Not sincerity (Makoto: is the agent's claim honest) and not determination (Detent: is this
 acquisition/transport deterministic) — a safety axis. 11 exact, no-substitute, PreToolUse hard
-denies, ported by SHAPE -- this phrase only: the form was reimplemented here, not imported
-(never a cross-repo dependency). Elsewhere "shape" carries its ordinary sense, fixed by the
-noun beside it (protocol shape, callable shape, bypass shape); README says so. From Detent (1) and
+denies, ported by SHAPE: the form was reimplemented here, not imported (never a cross-repo
+dependency). That is a term of art and it is used wherever a port is described -- NOTICE,
+`wire.py`, `plugin/hooks/dispatch.sh`, `tests/test_dispatch_shim.py`, and the row banners
+below. A SHARED SHAPE is a second term of art, for an abstraction two checks would have to
+fake to be tabled together (see the AST-scaffold argument above). Every other use is
+ordinary English fixed by the noun beside it. From Detent (1) and
 Makoto (10), unified here because they share one real MECHANISM, not a domain: PreToolUse BLOCK,
 exact predicate, no judgment, no softer tier.
 
-A PREDICATE is the whole match rule of ONE deny row: the test that row applies to an
-event, owned by that row and by nothing else. The seven `_*_node_match` helpers below
-are AST-level parts a predicate is built from, never predicates in their own right and
-never rows; `render_readme_claims.py`'s "keep new predicates narrow" is about this
-sense. No other artifact defines the word.
+A PREDICATE is a match rule: a test applied to an event or a node, returning whether it
+matches. Two levels use the word and both are legitimate. A ROW predicate is the whole
+rule one deny row applies to an event, owned by that row. A NODE-MATCH predicate is one
+of the seven `_*_node_match` helpers below, or a component test like `_is_world_tool` --
+parts a row predicate is built from, never rows themselves. Where the level matters the
+text says which; bare "predicate" means the row level. No other artifact defines it.
 
 Design principle (owner correction, 2026-07-13): don't keep a whole check monolithic because ONE
 part of it needs bespoke logic — separate the irreducible sliver from the rest, and TABLE the
@@ -656,8 +660,9 @@ def _cannot_evaluate(event: dict[str, Any]) -> Optional[str]:
     A missing path used to make both the lexical path check and every AST check silently skip a
     Write/Edit.  That is not a clean result: Ward has lost the information needed to decide
     whether the pending mutation is safe.  Keep this preflight outside ``CHECKS`` so the eleven
-    substantive predicates remain the advertised table (`CHECKS` itself: the rows README
-    publishes and counts, and the only population any count claim in this repository means); this is the dispatcher-facing failure
+    substantive predicates remain the advertised table (`CHECKS` itself: the eleven rows README's
+    table publishes and counts. Other counts in this repository -- tests, corpus sessions,
+    derailments -- have their own populations and are not about this one); this is the dispatcher-facing failure
     direction for an event those predicates cannot be evaluated against.
     """
     if event.get("hook_event_name") != "PreToolUse":

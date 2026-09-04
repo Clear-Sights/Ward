@@ -80,7 +80,7 @@ The 7 rows from `ward.timing_unsafe_compare` through
 4 use path text, serialized outbound payloads, or introduced-versus-removed mutation text.
 <!-- END GENERATED contiguous-checks -->
 
-**Three words in the rows above, each owned in one place.** A *supported* source, configuration,
+**Three words this page uses, each owned in one place.** A *supported* source, configuration,
 or shell-file mutation is one whose path matches `_MUTATION_TEXT_SUFFIX_RX`
 (`plugin/ward/checks.py`) -- `.py`, `.toml`, `.yaml`/`.yml`, `.json`, `.ini`, `.cfg`, `.conf`,
 `.sh`, `.bash`, `.zsh`, `.ipynb` -- reached through `_text_mutation_input`, which is the whole
@@ -89,10 +89,13 @@ supported, and the pair widens together or not at all.
 
 A *check* in a row description is one in the code being edited -- the subject's verifier -- never
 a row of this table; `plugin/ward/dispatch.py` owns the table sense ("every one of these 11
-checks is an unconditional hard block"). A *shape* is whatever its adjoining noun says: a
-protocol shape below is one of the two JSON forms Ward emits, a callable shape is a function's
-body and signature, a bypass shape in [SECURITY.md](SECURITY.md) is a scenario. Only
-`plugin/ward/checks.py`'s "ported by SHAPE" is a term of art, and it is scoped there.
+checks is an unconditional hard block"). *Shape* carries two terms of art and an ordinary
+sense, all three fixed in [plugin/ward/checks.py](plugin/ward/checks.py): *ported by shape* means
+reimplemented from another project's form rather than imported, used wherever this repository
+describes a port; a *shared shape* is an abstraction two checks would have to fake to be tabled
+together. Otherwise the adjoining noun fixes it -- a protocol shape below is one of the two JSON
+forms Ward emits, a callable shape is a function's body and signature, a bypass shape in
+[SECURITY.md](SECURITY.md) is a scenario.
 
 Evaluate coverage here, not only in [Scope, precisely](#scope-precisely): NotebookEdit receives the
 `ward.forbidden_location` path check, but its cell text is **not** parsed by the seven
@@ -108,7 +111,7 @@ introduced-Python rows.
 <!-- END GENERATED dispatch-image -->
 
 [plugin/ward/dispatch.py](plugin/ward/dispatch.py) reads one JSON event. For a `PreToolUse` event, it applies the
-mutation-input preflight where relevant, then evaluates the rows in order and emits one of two
+preflight defined in [plugin/ward/checks.py](plugin/ward/checks.py) where relevant, then evaluates the rows in order and emits one of two
 protocol shapes:
 
 - A match becomes `permissionDecision: "deny"` with the `ward.*` row identifier, the specific
