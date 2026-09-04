@@ -2,9 +2,24 @@
 
 Not sincerity (Makoto: is the agent's claim honest) and not determination (Detent: is this
 acquisition/transport deterministic) — a safety axis. 11 exact, no-substitute, PreToolUse hard
-denies, ported by SHAPE (never imported — copy, never a cross-repo dependency) from Detent (1) and
+denies, ported by SHAPE: the form was reimplemented here, not imported (never a cross-repo
+dependency). That is a term of art and it is used wherever a port is described -- NOTICE,
+`wire.py`, `plugin/hooks/dispatch.sh`, `tests/test_dispatch_shim.py`, and the row banners
+below. A SHARED SHAPE is a second term of art, for an abstraction two checks would have to
+fake to be tabled together (see the AST-scaffold argument above). Every other use is
+ordinary English -- "the form of the thing under discussion" -- fixed by its context.
+Usually that is the noun beside it (callable shape, protocol shape, payload shape); a few
+elide the noun and take it from the sentence around them. From Detent (1) and
 Makoto (10), unified here because they share one real MECHANISM, not a domain: PreToolUse BLOCK,
 exact predicate, no judgment, no softer tier.
+
+A PREDICATE is a match rule: a test over some value -- an event, an AST node, a tool name,
+a payload field -- returning whether it matches. Two levels use the word and both are
+legitimate. A ROW predicate is the whole rule one deny row applies to an event, owned by
+that row. A COMPONENT predicate is a part a row predicate is built from and never a row
+itself: the seven `_*_node_match` helpers below, and tests like `_is_world_tool`. Where
+the level matters the text says which; bare "predicate" means the row level, except at
+`_is_world_tool`'s own definition and docstring. No other artifact defines it.
 
 Design principle (owner correction, 2026-07-13): don't keep a whole check monolithic because ONE
 part of it needs bespoke logic — separate the irreducible sliver from the rest, and TABLE the
@@ -179,7 +194,7 @@ def is_false_const(node) -> bool:
 def is_cert_none(node) -> bool:
     """True iff `node` is `ssl.CERT_NONE` (an Attribute), a bare `CERT_NONE` Name, or the literal
     `0` -- which IS `ssl.CERT_NONE` at runtime (`VerifyMode.CERT_NONE == 0`), so `verify_mode = 0`
-    disables verification byte-for-byte the same way and used to pass unseen (WM-05). Bool is
+    disables verification byte-for-byte the same way and used to pass unseen. Bool is
     excluded: `False` is not the spelling anyone writes for a verify mode, and `is False` has its
     own check."""
     if isinstance(node, ast.Attribute) and node.attr == "CERT_NONE":
@@ -598,14 +613,17 @@ _PATH_MUTATION_NAMES = _WRITE_NAMES | _EDIT_NAMES
 #
 # This used to read `{"Write", "Edit", "MultiEdit"}` with a note that `NotebookEdit` had "never
 # been covered" and that whether it belongs "is a scope question, [to] be answered once, here".
-# ANSWERED, by measuring what the exclusion cost. Nine content rows, one payload each, the same
-# source text spelled three ways:
+# ANSWERED, by measuring what the exclusion cost. The denominator below is the table AS IT STOOD
+# AT THAT MEASUREMENT -- nine content-reading rows then, against eleven rows now. It is quoted
+# here as history and is deliberately not restated against the current table, which would be a
+# second, wrong measurement. Nine content rows, one payload each, the same source text spelled
+# three ways:
 #
 #     Write to a.py       8 of 9 FIRE
 #     Write to a.ipynb    0 of 9 fire
 #     NotebookEdit        0 of 9 fire
 #
-# Eight of nine rows were evaded by choosing the notebook spelling of the identical act. That is
+# Eight of those nine rows were evaded by choosing the notebook spelling of the identical act. That is
 # not a scoping decision, it is a DEFEAT -- the same shape as the Write-vs-Edit one closed
 # alongside it: the table held only while the agent picked a `.py` suffix and a non-notebook tool.
 # `_PATH_MUTATION_NAMES` and `_cannot_evaluate` already knew `NotebookEdit` and `notebook_path`,
@@ -645,7 +663,9 @@ def _cannot_evaluate(event: dict[str, Any]) -> Optional[str]:
     A missing path used to make both the lexical path check and every AST check silently skip a
     Write/Edit.  That is not a clean result: Ward has lost the information needed to decide
     whether the pending mutation is safe.  Keep this preflight outside ``CHECKS`` so the eleven
-    substantive predicates remain the advertised table; this is the dispatcher-facing failure
+    substantive predicates remain the advertised table (`CHECKS` itself: the eleven rows README's
+    table publishes and counts. Other counts in this repository -- tests, corpus sessions,
+    derailments -- have their own populations and are not about this one); this is the dispatcher-facing failure
     direction for an event those predicates cannot be evaluated against.
     """
     if event.get("hook_event_name") != "PreToolUse":
@@ -794,8 +814,8 @@ def _location_reason(name: str, file_path: str, cwd: str) -> Optional[str]:
 
     # A NEIGHBOURING SPELLING OF THE SAME OBJECT is the same object: `.netrc.bak` then `mv`,
     # `.bashrc.local` sourced by the listed rc, `id_rsa~`. The set names the stem; a basename
-    # that IS a member or extends one across a `.`, `-`, `_` or `~` boundary is in the arm
-    # (WM-06). Stated allowance: a public half of a key pair (`id_*.pub`) is not a credential.
+    # that IS a member or extends one across a `.`, `-`, `_` or `~` boundary is in the arm.
+    # Stated allowance: a public half of a key pair (`id_*.pub`) is not a credential.
     stem_rc = _stem_in(basename, _SHELL_RC_BASENAMES)
     if stem_rc:
         return f"shell-rc: target basename {basename!r} is a shell startup file ({stem_rc})"
@@ -927,7 +947,7 @@ def _text_mutation_input(event: dict) -> Optional[dict]:
 # target file is the only witness to what a whole-file Write destroys, so `_removed_contents`
 # reads it -- bounded, and only for that one branch.
 # `check` itself was absent -- only `checksum` -- so `def check_signature()` removed, or
-# `checks_enabled = False`, never fired (WM-07). `validat` is the other spelling of the same act.
+# `checks_enabled = False`, never fired. `validat` is the other spelling of the same act.
 _CHECK_WORD = r"(?:audit|verif(?:y|ier|ication)?|integrit(?:y|ies)|attest|check(?:s|ed|ing|er)?|validat(?:e|ion|or)|signature|tamper|provenance)"
 _CHECK_SYMBOL_RX = re.compile(
     rf"(?i)\b(?:def\s+)?([A-Za-z_]\w*{_CHECK_WORD}\w*|{_CHECK_WORD}[A-Za-z_]\w*)\s*(?=\()"
