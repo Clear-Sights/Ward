@@ -302,12 +302,7 @@ def scan_introduced_text(tool_input: dict) -> tuple[str, ...]:
     documentation file that happens to live inside a notebook."""
     if not isinstance(tool_input, dict):
         return ()
-    path = ""
-    for key in _LOCATION_KEYS:
-        value = tool_input.get(key)
-        if isinstance(value, str) and value:
-            path = value
-            break
+    path = _location_arg(tool_input) or ""
     contents = scan_target_contents(tool_input)
     if not _NOTEBOOK_FILE_RX.search(path):
         return contents
@@ -336,12 +331,7 @@ def scan_introduced_python(tool_input: dict) -> tuple[str, ...]:
     forgets -- which is exactly how the notebook gap came to exist."""
     if not isinstance(tool_input, dict):
         return ()
-    path = ""
-    for key in _LOCATION_KEYS:
-        value = tool_input.get(key)
-        if isinstance(value, str) and value:
-            path = value
-            break
+    path = _location_arg(tool_input) or ""
     if _PY_FILE_RX.search(path):
         return scan_target_contents(tool_input)
     if not _NOTEBOOK_FILE_RX.search(path):
@@ -919,12 +909,7 @@ def _text_mutation_input(event: dict) -> Optional[dict]:
         return None
     # Both spellings of "which file", for the same reason the tool set above is a union: reading
     # only `file_path` let a NotebookEdit pass every other gate and then match no path at all.
-    path = ""
-    for key in _LOCATION_KEYS:
-        value = ti.get(key)
-        if isinstance(value, str) and value:
-            path = value
-            break
+    path = _location_arg(ti, str(event.get("tool_name") or "")) or ""
     if not _MUTATION_TEXT_SUFFIX_RX.search(path):
         return None
     return ti
