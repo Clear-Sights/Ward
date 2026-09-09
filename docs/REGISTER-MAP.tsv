@@ -1,0 +1,77 @@
+entry	verdict	runner	note
+A1	OUT-OF-SUBJECT	-	a sentinel choice inside code; ward denies the act, and reads only typed fields of the pending call
+A2	RUNNER	ward.forbidden_location	path text is judged after lexical canonicalization, not on spelling
+A3	OUT-OF-SUBJECT	-	pairing of two sequences inside code ward does not execute
+A4	OUT-OF-SUBJECT	-	duplicate-key precedence inside code ward does not execute
+A5	OUT-OF-SUBJECT	-	an extracted inner value inside code ward does not execute
+A6	OUT-OF-SUBJECT	-	threshold behaviour of a metric ward does not compute
+A7	OUT-OF-SUBJECT	-	aggregation inside code ward does not execute
+A11	OUT-OF-SUBJECT	-	occurrence counting inside code ward does not execute
+A13	OUT-OF-SUBJECT	-	which layer set a value; ward reads the call's typed fields, not the platform
+B1	RUNNER	ward.self_mute_guard	a mutation that disables a verifier or strips its callable shape is denied
+B2	RUNNER	ward.self_mute_guard	removing a check's callable shape is how an assertion stops being able to fail
+B4	OUT-OF-SUBJECT	-	proxy-versus-target agreement inside work ward does not grade
+B5	RUNNER	ward.self_mute_guard	a verifier reduced to a constant verdict is a disabled verifier
+B6	OUT-OF-SUBJECT	-	a graded denominator inside work ward does not compute
+B7	RUNNER	tools/register_map.py	every row binds to the one dispatch table; this file binds the register to ward
+B8	OUT-OF-SUBJECT	-	absence as evidence, in reasoning ward does not perform
+B9	RUNNER	ward.integrity_suppression_flag	a suppression flag or environment gate is an exemption with no checkable end
+B10	OUT-OF-SUBJECT	-	abstention rate of a check inside work ward does not run
+B11	OUT-OF-SUBJECT	-	a baseline run is not an act ward inspects
+B14	OUT-OF-SUBJECT	-	with-and-without measurement is not an act ward inspects
+B17	OUT-OF-SUBJECT	-	a detector containing its own pattern, in work ward does not grade
+B18	OUT-OF-SUBJECT	-	held-out reporting is a property of a corpus, not of an act
+B20	RUNNER	ward.self_mute_guard	editing the subject's verifier until it passes is the mutation this row denies
+B21	OUT-OF-SUBJECT	-	isolation of conditions inside a suite ward does not run
+B23	OUT-OF-SUBJECT	-	a numeric bound inside code ward does not execute
+B24	OUT-OF-SUBJECT	-	citation scope, in prose ward does not read
+B26	RUNNER	ward.self_mute_guard	ward's own liveness cannot be removed by the act it is inspecting
+B28	OUT-OF-SUBJECT	-	sequencing of test cases inside a suite ward does not run
+B32	OUT-OF-SUBJECT	-	a proof's structure inside work ward does not check
+B34	RUNNER	tools/register_map.py	ward's own law is run over ward, and names every region it cannot reach
+C1	RUNNER	ward.integrity_suppression_flag	a gate that silences verification is how a computed failure is dropped
+C2	RUNNER	dispatch fail-closed	an input ward cannot decide is denied, never allowed as undecided
+C3	OUT-OF-SUBJECT	-	one item masking others, inside work ward does not grade
+C4	RUNNER	dispatch fail-closed	a raising row resolves as a denial, never as permission
+C5	RUNNER	dispatch fail-closed	an unrecognised call shape ends in a denial, not a fallthrough
+C6	RUNNER	ward.timing_unsafe_compare	the wanted comparison is stated as constant-time; a short-circuiting one is the inversion
+C7	OUT-OF-SUBJECT	-	partial output of a producer ward does not run
+C8	OUT-OF-SUBJECT	-	a launcher's exit, in work ward does not wait on
+C9	RUNNER	audit log	every denial is persisted, not held in the window
+C10	RUNNER	ward.outbound_secret_pattern	every outbound route is named: MCP, WebFetch and WebSearch payloads alike
+D1	OUT-OF-SUBJECT	-	reading a write back is a later act; ward decides the pending one
+D2	RUNNER	ward.forbidden_location	an edit landing outside cwd is the wrong scope, denied before it lands
+D3	OUT-OF-SUBJECT	-	pinning an identity inside work ward does not grade
+D4	OUT-OF-SUBJECT	-	a stale derivative inside work ward does not regenerate
+D8	OUT-OF-SUBJECT	-	magnitude of a system ward does not execute
+D9	OUT-OF-SUBJECT	-	self-inclusion in a set, inside work ward does not compute
+D11	OUT-OF-SUBJECT	-	an edit drowned in a rewrite is illusory progress, which is keel's and makoto's subject
+D12	RUNNER	ward.forbidden_location	a write to a protected or out-of-cwd location is the boundary the copy would not survive
+D13	OUT-OF-SUBJECT	-	enumerating a set before removing it is a sequence demand, not a denial of one act
+D14	OUT-OF-SUBJECT	-	an undo's provability is a sequence demand, not a denial of one act
+E1	RUNNER	tests row-witness invariant	every row carries an input that selects it, first-match-wins order included
+E3	RUNNER	ward-allow annotation	an explicit intent marker is required to pass what would otherwise match
+E4	RUNNER	ward.cert_verify_disabled	the platform's TLS posture is refused as inherited; verification is stated
+E5	OUT-OF-SUBJECT	-	retry structure inside code ward does not execute
+E7	RUNNER	ward.cert_reqs_none	the peer-verification condition is set explicitly rather than left ambient
+E8	RUNNER	ward.cert_none_mode	each TLS setting is valid alone; this row denies the combination that disables the check
+E9	OUT-OF-SUBJECT	-	a fallback's coverage of its own trigger, in code ward does not execute
+E10	OUT-OF-SUBJECT	-	failure classification inside code ward does not execute
+E11	OUT-OF-SUBJECT	-	nested limits of a host ward does not allocate
+E12	RUNNER	ward.jwt_signature_disabled	the principal is the signature's; disabling verification is granting what you cannot hold
+E13	OUT-OF-SUBJECT	-	a detached task's channel is not a field of the pending call
+F1	RUNNER	tests table-shape invariant	the two mutation-text rows widen together or not at all; the pair is enumerated
+F2	RUNNER	plugin/ward/checks.py	one ordered table; the dispatcher owns its sense and every consumer reads it
+F3	OUT-OF-SUBJECT	-	a referent that moved, in work ward does not re-resolve
+F4	RUNNER	ward.paramiko_host_key_weakened	a host key is taken from the primary artifact, never auto-added on description
+F6	OUT-OF-SUBJECT	-	monotonicity of a state space ward does not walk
+F7	OUT-OF-SUBJECT	-	a check-then-act race inside code ward does not execute
+F8	OUT-OF-SUBJECT	-	alert suppression of a system ward does not emit
+F10	OUT-OF-SUBJECT	-	trusting a record of an event, in work ward does not re-derive
+F12	OUT-OF-SUBJECT	-	a discriminating observation between mechanisms, in work ward does not perform
+F14	RUNNER	ward.jwt_none_alg	an allow-list declared safe that admits the unsigned algorithm is the class claim that changed behaviour
+F16	OUT-OF-SUBJECT	-	a record's watermark, in work ward does not read
+G1	OUT-OF-SUBJECT	-	answering a nearby question is a statement; ward denies acts
+G2	OUT-OF-SUBJECT	-	asking a settled question is a statement; ward denies acts
+G3	OUT-OF-SUBJECT	-	a party's span against the answer's is not a field of the pending call
+G5	OUT-OF-SUBJECT	-	an epistemic "cannot" is a statement; ward denies acts
