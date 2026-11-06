@@ -15,7 +15,7 @@ from typing import Any, Iterator
 from urllib.parse import urlparse
 
 
-_MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(((?:[^()]|\([^()]*\))+)\)")
+_MARKDOWN_LINK_OPEN = re.compile(r"!?\[[^\]]*\]\(")
 # Do not let a fenced block consume the inline spans that follow it.  Local paths in
 # executable examples are commands or scratch files, not documentary citations, so this
 # intentionally recognises only one-line inline code spans.
@@ -67,18 +67,35 @@ def _is_relative_path(target: str) -> bool:
     return target in {".", "./", "..", "../"} or bool(_PATHLIKE.fullmatch(target))
 
 
+def _link_destination(text: str, start: int) -> str:
+    """The destination of the link whose ``(`` ends just before ``start``.
+
+    The one place Markdown's destination grammar lives: ``<...>`` may contain spaces, a bare
+    destination ends at whitespace (a title may follow) or at the ``)`` that closes the link, and
+    balanced parentheses inside it belong to it.  Resolving the destination rather than its
+    title is the only relevant claim."""
+    i = start
+    while i < len(text) and text[i] in " \t":
+        i += 1
+    if text.startswith("<", i):
+        end = text.find(">", i)
+        return text[i + 1:end] if end != -1 else ""
+    depth, j = 0, i
+    while j < len(text) and not text[j].isspace():
+        if text[j] == "(":
+            depth += 1
+        elif text[j] == ")":
+            if depth == 0:
+                break
+            depth -= 1
+        j += 1
+    return text[i:j]
+
+
 def _markdown_references(path: Path) -> Iterator[RelativeReference]:
     text = path.read_text(encoding="utf-8")
-    for match in _MARKDOWN_LINK.finditer(text):
-        target = match.group(1).strip()
-        if target.startswith("<") and ">" in target:
-            # An angle-bracketed destination may contain spaces; a title may follow the ">".
-            target = target[1:target.index(">")]
-        else:
-            # A Markdown title follows whitespace.  Ward's documentation currently has none,
-            # but resolving the destination rather than its title is the only relevant claim.
-            target = target.split(maxsplit=1)[0] if target else target
-        target = _without_fragment(target)
+    for match in _MARKDOWN_LINK_OPEN.finditer(text):
+        target = _without_fragment(_link_destination(text, match.end()))
         # Markdown's link grammar supplies the structural context, so an extensionless
         # target such as ``[guide](CONTRIBUTING)`` is still a repository citation.
         if _is_relative_target(target):

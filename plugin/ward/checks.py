@@ -249,8 +249,12 @@ def jwt_decode_callee_chain(node) -> Optional[str]:
 _NOTEBOOK_FILE_RX = re.compile(r"(?i)\.ipynb$")
 
 
-def _notebook_cell_sources(text: str, code_only: bool = False) -> tuple[str, ...]:
-    """Every cell's source in a notebook document, or () when `text` is not one.
+def _notebook_cell_sources(text: str, code_only: bool = False) -> tuple[str, ...] | None:
+    """Every cell's source in a notebook document, or None when `text` is not one.
+
+    None and () are different answers: () is a notebook with nothing to read (for example only
+    markdown cells), None is a document that is not a notebook at all. Callers that fall back to
+    the raw text must do so only on None.
 
     `code_only` selects the Python reader's filter. ONE walker with two filters rather than two
     walkers: the notebook-shape handling below is the part that is easy to get subtly wrong, and a
@@ -262,13 +266,13 @@ def _notebook_cell_sources(text: str, code_only: bool = False) -> tuple[str, ...
     prose to a Python parser produces nothing but noise.
 
     Conservative in the only direction that matters -- anything that is not a well-formed notebook
-    yields no cells rather than a guess, so this can never manufacture a fragment to judge."""
+    yields None rather than a guess, so this can never manufacture a fragment to judge."""
     try:
         doc = json.loads(text)
     except (ValueError, TypeError, RecursionError):
-        return ()
+        return None
     if not isinstance(doc, dict) or not isinstance(doc.get("cells"), list):
-        return ()
+        return None
     out = []
     for cell in doc["cells"]:
         if not isinstance(cell, dict):
@@ -314,7 +318,7 @@ def scan_introduced_text(tool_input: dict) -> tuple[str, ...]:
         cells = _notebook_cell_sources(content, code_only=True)
         # A document that does not parse as a notebook is scanned as the text it is, rather than
         # dropped -- declining to read must never become a way to be silent.
-        out.extend(cells if cells or _notebook_cell_sources(content) else (content,))
+        out.extend((content,) if cells is None else cells)
     return tuple(out)
 
 
@@ -340,7 +344,7 @@ def scan_introduced_python(tool_input: dict) -> tuple[str, ...]:
         return scan_target_contents(tool_input)
     cells: list[str] = []
     for content in scan_target_contents(tool_input):
-        cells.extend(_notebook_cell_sources(content, code_only=True))
+        cells.extend(_notebook_cell_sources(content, code_only=True) or ())
     return tuple(cells)
 
 

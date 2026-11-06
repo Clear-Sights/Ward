@@ -34,6 +34,33 @@ ROWS = 11
 from ward.checks import CHECKS  # noqa: E402
 
 
+def parse_row(n, line, table):
+    """One map row as (entry, verdict, runner, note) plus every problem with its shape.
+
+    The one place a row is read AND checked, so a malformed row is reported where it is parsed and
+    nothing downstream unpacks a row that was never validated. entry is None for a row with the
+    wrong number of columns."""
+    cols = line.split("\t")
+    if len(cols) != 4:
+        return None, [f"line {n}: {len(cols)} columns, not the 4 of the header"]
+    entry, verdict, runner, note = cols
+    errors = []
+    if verdict not in VERDICTS:
+        errors.append(f"line {n}: {entry} verdict {verdict!r} is not one of {sorted(VERDICTS)}")
+    if not note.strip():
+        errors.append(f"line {n}: {entry} has a verdict and no note")
+    if verdict == "RUNNER":
+        if runner in ("", "-"):
+            errors.append(f"line {n}: {entry} is RUNNER and names no runner")
+        elif runner.startswith("ward.") and runner not in table:
+            errors.append(f"line {n}: {entry} cites {runner}, which the table does not carry")
+        elif "/" in runner and not (ROOT / runner).exists():
+            errors.append(f"line {n}: {entry} cites {runner}, which is not on disk")
+    elif runner != "-":
+        errors.append(f"line {n}: {entry} is {verdict} but names a runner")
+    return (entry, verdict, runner, note), errors
+
+
 def main():
     entries = [m.group(1) for m in
                (ENTRY_RX.match(ln) for ln in REGISTER.read_text(encoding="utf-8").splitlines())
@@ -47,27 +74,14 @@ def main():
     for n, line in enumerate(MAP.read_text(encoding="utf-8").splitlines()[1:], start=2):
         if not line.strip():
             continue
-        cols = line.split("\t")
-        if len(cols) != 4:
-            errors.append(f"line {n}: {len(cols)} columns, not the 4 of the header")
+        row, problems = parse_row(n, line, table)
+        errors.extend(problems)
+        if row is None:
             continue
-        entry, verdict, runner, note = cols
+        entry, verdict, runner, note = row
         if entry in rows:
             errors.append(f"line {n}: {entry} stated twice")
         rows[entry] = (verdict, runner, note)
-        if verdict not in VERDICTS:
-            errors.append(f"line {n}: {entry} verdict {verdict!r} is not one of {sorted(VERDICTS)}")
-        if not note.strip():
-            errors.append(f"line {n}: {entry} has a verdict and no note")
-        if verdict == "RUNNER":
-            if runner in ("", "-"):
-                errors.append(f"line {n}: {entry} is RUNNER and names no runner")
-            elif runner.startswith("ward.") and runner not in table:
-                errors.append(f"line {n}: {entry} cites {runner}, which the table does not carry")
-            elif "/" in runner and not (ROOT / runner).exists():
-                errors.append(f"line {n}: {entry} cites {runner}, which is not on disk")
-        elif runner != "-":
-            errors.append(f"line {n}: {entry} is {verdict} but names a runner")
 
     for missing in sorted(set(entries) - set(rows)):
         errors.append(f"register entry {missing} has no row in the map")
