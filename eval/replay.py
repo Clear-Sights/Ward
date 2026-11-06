@@ -99,11 +99,9 @@ def fired(result: dict) -> str | None:
     decision = result["decision"]
     hook = decision.get("hookSpecificOutput", {})
     if hook.get("permissionDecision") == "deny":
-        return hook.get("permissionDecisionReason", "(denied, no reason field)")
+        return hook.get("permissionDecisionReason") or "(denied, no reason field)"
     if decision.get("decision") == "block":
-        return decision.get("reason", "(blocked, no reason field)")
-    if result["exit"] == 2:
-        return "(exit 2: block)"
+        return decision.get("reason") or "(blocked, no reason field)"
     return None
 
 

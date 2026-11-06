@@ -100,7 +100,7 @@ def _marker_name(session: str) -> str:
     can still tell which session a marker belongs to.
     """
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in session)[:64]
-    return f"{safe}-{hashlib.sha256(session.encode('utf-8')).hexdigest()[:16]}"
+    return f"{safe}-{hashlib.sha256(session.encode('utf-8', 'surrogatepass')).hexdigest()[:16]}"
 
 
 _STALE_CLAIM_SECONDS = 60

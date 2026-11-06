@@ -15,7 +15,7 @@ from typing import Any, Iterator
 from urllib.parse import urlparse
 
 
-_MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
+_MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(((?:[^()]|\([^()]*\))+)\)")
 # Do not let a fenced block consume the inline spans that follow it.  Local paths in
 # executable examples are commands or scratch files, not documentary citations, so this
 # intentionally recognises only one-line inline code spans.
@@ -71,11 +71,13 @@ def _markdown_references(path: Path) -> Iterator[RelativeReference]:
     text = path.read_text(encoding="utf-8")
     for match in _MARKDOWN_LINK.finditer(text):
         target = match.group(1).strip()
-        if target.startswith("<") and target.endswith(">"):
-            target = target[1:-1]
-        # A Markdown title follows whitespace.  Ward's documentation currently has none,
-        # but resolving the destination rather than its title is the only relevant claim.
-        target = target.split(maxsplit=1)[0] if target else target
+        if target.startswith("<") and ">" in target:
+            # An angle-bracketed destination may contain spaces; a title may follow the ">".
+            target = target[1:target.index(">")]
+        else:
+            # A Markdown title follows whitespace.  Ward's documentation currently has none,
+            # but resolving the destination rather than its title is the only relevant claim.
+            target = target.split(maxsplit=1)[0] if target else target
         target = _without_fragment(target)
         # Markdown's link grammar supplies the structural context, so an extensionless
         # target such as ``[guide](CONTRIBUTING)`` is still a repository citation.

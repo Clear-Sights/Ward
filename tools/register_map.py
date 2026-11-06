@@ -47,7 +47,11 @@ def main():
     for n, line in enumerate(MAP.read_text(encoding="utf-8").splitlines()[1:], start=2):
         if not line.strip():
             continue
-        entry, verdict, runner, note = line.split("\t")
+        cols = line.split("\t")
+        if len(cols) != 4:
+            errors.append(f"line {n}: {len(cols)} columns, not the 4 of the header")
+            continue
+        entry, verdict, runner, note = cols
         if entry in rows:
             errors.append(f"line {n}: {entry} stated twice")
         rows[entry] = (verdict, runner, note)
@@ -56,7 +60,9 @@ def main():
         if not note.strip():
             errors.append(f"line {n}: {entry} has a verdict and no note")
         if verdict == "RUNNER":
-            if runner.startswith("ward.") and runner not in table:
+            if runner in ("", "-"):
+                errors.append(f"line {n}: {entry} is RUNNER and names no runner")
+            elif runner.startswith("ward.") and runner not in table:
                 errors.append(f"line {n}: {entry} cites {runner}, which the table does not carry")
             elif "/" in runner and not (ROOT / runner).exists():
                 errors.append(f"line {n}: {entry} cites {runner}, which is not on disk")

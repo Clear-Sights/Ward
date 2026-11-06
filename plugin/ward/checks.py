@@ -314,7 +314,7 @@ def scan_introduced_text(tool_input: dict) -> tuple[str, ...]:
         cells = _notebook_cell_sources(content, code_only=True)
         # A document that does not parse as a notebook is scanned as the text it is, rather than
         # dropped -- declining to read must never become a way to be silent.
-        out.extend(cells if cells else (content,))
+        out.extend(cells if cells or _notebook_cell_sources(content) else (content,))
     return tuple(out)
 
 

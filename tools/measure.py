@@ -76,8 +76,8 @@ def contiguous_count() -> int:
     if missing:
         raise RuntimeError(
             f"AST_SCAFFOLD_ROWS names rows the table no longer carries: {missing}")
-    first = names.index(AST_SCAFFOLD_ROWS[0])
-    last = names.index(AST_SCAFFOLD_ROWS[-1])
+    positions = [names.index(row) for row in AST_SCAFFOLD_ROWS]
+    first, last = min(positions), max(positions)
     span = names[first:last + 1]
     # Compared as SETS: the order of rows in the table is a first-match concern that other
     # checks own, and pinning it here would make this raise on a reordering that changes nothing
