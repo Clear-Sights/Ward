@@ -48,8 +48,10 @@ def test_register_map_reddens_on_a_row_the_table_does_not_carry(tmp_path, monkey
     assert register_map.main() == 2
 
 
-# Digest of docs/REGISTER.md as vendored from measure-zero-dev. Re-pin deliberately
-# when the register is re-vendored; that edit is the record that a copy moved.
+# Digest of docs/REGISTER.md, this repository's own copy (its former source,
+# measure-zero-dev/REGISTER.md, no longer exists; byte-identical to Clear-Sights/Keel
+# docs/REGISTER.md). Re-pin deliberately when the register changes; that edit is the
+# record that it moved.
 REGISTER_DIGEST = "f262b53bcb839927ec045402522cff1ba64b6e9665cadf0d4734c858fd71ee69"
 
 
