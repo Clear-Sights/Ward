@@ -5,6 +5,8 @@
   <img src="docs/img/ward-hero-light.png" alt="Ward — nothing outright bad happens">
 </picture>
 
+Shipped plugin — installable and versioned. The dispatcher is replay-tested against authored sessions; its effect on a live session's outcome is unmeasured.
+
 ## The problem
 
 Under pressure, an agent can take the shortcut that turns a red test green:
