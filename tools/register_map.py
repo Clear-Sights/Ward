@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Grade ward's coverage of the blindspot register.
 
-docs/REGISTER.md is a vendored copy; the source is measure-zero-dev/REGISTER.md.
+docs/REGISTER.md is this repository's own copy; its former source,
+measure-zero-dev/REGISTER.md, no longer exists. It is byte-identical to
+Clear-Sights/Keel docs/REGISTER.md.
 docs/REGISTER-MAP.tsv gives every entry in it one of two verdicts:
 
   RUNNER          a named row of the ordered denial table, or a structural
