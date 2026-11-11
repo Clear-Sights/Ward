@@ -20,8 +20,8 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 
 # Digest of docs/REGISTER.md, this repository's own copy (its former source,
-# measure-zero-dev/REGISTER.md, no longer exists; byte-identical to Clear-Sights/Keel
-# docs/REGISTER.md). Re-pin deliberately when the register changes; that edit is the
+# measure-zero-dev/REGISTER.md, is not among the owner's repositories; byte-identical
+# to Clear-Sights/Keel docs/REGISTER.md). Re-pin deliberately when the register changes; that edit is the
 # record that it moved.
 REGISTER_DIGEST = "f262b53bcb839927ec045402522cff1ba64b6e9665cadf0d4734c858fd71ee69"
 
