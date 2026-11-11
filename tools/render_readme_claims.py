@@ -45,14 +45,15 @@ def generated() -> dict[str, str]:
         "quickstart-checks":
             f"Ward is a Claude Code `PreToolUse` plugin: an ordered {rows}-row table of exact denials over the\n"
             "pending tool call. A match denies with a citation and a retry hint; anything else is a silent\n"
-            "`{}`. No state, no history, and nothing configurable about what it denies.",
+            "`{}`. No verdict reads state or history, and nothing about what it denies is configurable.",
         "checks-heading":
             f"The ordered `CHECKS` table in [plugin/ward/checks.py](plugin/ward/checks.py) contains these {rows} rows. The first\n"
             "matching row wins.",
         "contiguous-checks":
             f"The {contiguous} rows from `ward.timing_unsafe_compare` through\n"
-            "`ward.paramiko_host_key_weakened` parse only newly introduced Python in a `.py` mutation. The other\n"
-            f"{rows - contiguous} use path text, serialized outbound payloads, or introduced-versus-removed mutation text.",
+            "`ward.paramiko_host_key_weakened` parse only newly introduced Python, from a `.py` mutation\n"
+            f"or a notebook's code cells. The other {rows - contiguous} use path text, serialized outbound\n"
+            "payloads, or introduced-versus-removed mutation text.",
         "dispatch-image":
             "<picture>\n"
             '  <source media="(prefers-color-scheme: dark)" srcset="docs/img/dispatch-flow-dark.png">\n'

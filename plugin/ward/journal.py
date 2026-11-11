@@ -44,7 +44,8 @@ PLUGIN = "ward"
 
 
 def state_dir() -> pathlib.Path:
-    """Ward's own store. `WARD_STATE_DIR` overrides; default `~/.claude/ward_state`.
+    """Ward's own store. `WARD_STATE_DIR` overrides; default `~/.claude/ward_state`, or
+    `~/.codex/ward_state` when `CODEX_PLUGIN_ROOT` or `CODEX_HOME` is set.
 
     Own store, not a host-provided one: no `CLAUDE_PLUGIN_DATA` equivalent exists on every host
     Ward runs on, and a log that only exists on one host cannot be the record.

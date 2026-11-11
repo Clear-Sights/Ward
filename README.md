@@ -7,8 +7,6 @@
 
 Shipped plugin — installable and versioned. The dispatcher is replay-tested against authored sessions; its effect on a live session's outcome is unmeasured.
 
-Shipped plugin — installable and versioned. The dispatcher is replay-tested against authored sessions; its effect on a live session's outcome is unmeasured.
-
 ## The problem
 
 Under pressure, an agent can take the shortcut that turns a red test green:
@@ -27,7 +25,7 @@ Ward sits before the act: the call is denied with a citation and a retry hint be
 <!-- BEGIN GENERATED quickstart-checks -->
 Ward is a Claude Code `PreToolUse` plugin: an ordered 11-row table of exact denials over the
 pending tool call. A match denies with a citation and a retry hint; anything else is a silent
-`{}`. No state, no history, and nothing configurable about what it denies.
+`{}`. No verdict reads state or history, and nothing about what it denies is configurable.
 <!-- END GENERATED quickstart-checks -->
 
 Ward requires Python 3.11 or newer and has no Python package dependencies. From a local checkout:
@@ -78,8 +76,9 @@ matching row wins.
 
 <!-- BEGIN GENERATED contiguous-checks -->
 The 7 rows from `ward.timing_unsafe_compare` through
-`ward.paramiko_host_key_weakened` parse only newly introduced Python in a `.py` mutation. The other
-4 use path text, serialized outbound payloads, or introduced-versus-removed mutation text.
+`ward.paramiko_host_key_weakened` parse only newly introduced Python, from a `.py` mutation
+or a notebook's code cells. The other 4 use path text, serialized outbound
+payloads, or introduced-versus-removed mutation text.
 <!-- END GENERATED contiguous-checks -->
 
 **Three words this page uses, each owned in one place.** A *supported* source, configuration,
@@ -101,8 +100,9 @@ Ward emits) or a callable shape (a function's body and signature); sometimes the
 sentence, as with the bypass shapes [SECURITY.md](SECURITY.md) enumerates.
 
 Evaluate coverage here, not only in [Scope, precisely](#scope-precisely): NotebookEdit receives the
-`ward.forbidden_location` path check, but its cell text is **not** parsed by the seven
-introduced-Python rows.
+`ward.forbidden_location` path check, and the seven introduced-Python rows parse notebook code too:
+a NotebookEdit's `new_source` and the code cells of a whole-notebook `.ipynb` Write
+(`scan_introduced_python` in `plugin/ward/checks.py`).
 
 ## How dispatch works
 
@@ -144,7 +144,8 @@ Journal rows are not table rows: everywhere above, a *row* is an entry in the `C
 in this section it is a line in the log. The two are counted separately and never correspond.
 
 `plugin/ward/journal.py` appends to `decisions.jsonl` under `$WARD_STATE_DIR` (default
-`~/.claude/ward_state`): one `session` journal row the first time a session is seen — carrying the
+`~/.claude/ward_state`, or `~/.codex/ward_state` when `CODEX_PLUGIN_ROOT` or `CODEX_HOME` is set):
+one `session` journal row the first time a session is seen — carrying the
 loaded check count, so the log proves Ward *ran* separately from whether it *caught* anything —
 plus one journal row per `deny`, per `fault`, and per repaired envelope. There is deliberately no
 journal row per allowed call.
@@ -194,12 +195,15 @@ here because a defeat that lives only in a module docstring persuades nobody who
 
 ## Scope, precisely
 
-Ward is act-only. It evaluates the current pending `PreToolUse` event and keeps no state or history;
+Ward is act-only. It evaluates the current pending `PreToolUse` event alone, and no verdict reads
+state or history (the journal under [What Ward writes down](#what-ward-writes-down) is written, never
+read for a verdict);
 it does not judge statements, sequences, intent, or post-execution outcomes.
 
-- Python inspection covers only introduced `.py` text: Write `content`, Edit `new_string`, and each
-  MultiEdit `new_string` independently. NotebookEdit receives the path check, but its cell text is
-  not parsed by the seven Python rows.
+- Python inspection covers only introduced Python: in a `.py` file, Write `content`, Edit
+  `new_string`, and each MultiEdit `new_string` independently; in a notebook, a NotebookEdit's
+  `new_source` and the code cells of a whole-notebook `.ipynb` Write. Markdown cells are prose and
+  are not parsed.
 - The location row normalizes path text lexically. It does not resolve symlinks, inspect mounts, open
   the target, or provide filesystem confinement. Host-designated Claude plan storage is the row's
   sanctioned out-of-`cwd` case unless the path independently matches an earlier protected-location
