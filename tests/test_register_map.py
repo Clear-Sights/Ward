@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 # measure-zero-dev/REGISTER.md, is not among the owner's repositories; byte-identical
 # to Clear-Sights/Keel docs/REGISTER.md). Re-pin deliberately when the register changes; that edit is the
 # record that it moved.
-REGISTER_DIGEST = "f262b53bcb839927ec045402522cff1ba64b6e9665cadf0d4734c858fd71ee69"
+REGISTER_DIGEST = "db5cde4ff368300d1363a54abbc47179edeeaf13ea52eabfbe8a688d778b04ce"
 
 
 class RegisterMapIsBound(unittest.TestCase):
