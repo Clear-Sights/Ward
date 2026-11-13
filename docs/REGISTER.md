@@ -312,6 +312,10 @@ both incidents. Prove it, both ways:
    listed. A gap in numbering with no
    carrier is an error.
 
+===== GAPS AND LINEAGE ==================
+B31: no revision in reach holds its text;
+  the id is retired, not reused.
+
 Form: id, name, defect under ten words,
 then "> " and the fix under ten.
 Append within the family; never renumber,
