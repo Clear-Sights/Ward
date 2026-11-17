@@ -34,11 +34,17 @@ import csv
 import hashlib
 import pathlib
 import shutil
+import sys
 import tempfile
 import unittest
 
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tools"))
+try:
+    from tools import xlsx  # noqa: E402
+except ImportError:
+    import xlsx  # noqa: E402
 HEADER = ("SYMBOL", "LOCAL-PATH", "OWNER-REPO", "OWNER-PATH", "DIGEST", "WHY")
 
 
@@ -166,9 +172,13 @@ def constant_dependencies(path, symbol, root):
 
 
 def rows(root):
-    ledger = root / "VENDORED.tsv"
-    lines = [line for line in ledger.read_text(encoding="utf-8").splitlines()
-             if line.strip() and not line.lstrip().startswith("#")]
+    """The VENDORED rows: the Vendored sheet of RECORDS.xlsx where the root holds one, else VENDORED.tsv (a planted tree)."""
+    book = root / "RECORDS.xlsx"
+    if book.exists():
+        lines = ["\t".join(row) for row in dict(xlsx.read_xlsx(book))["Vendored"]]
+    else:
+        lines = [line for line in (root / "VENDORED.tsv").read_text(encoding="utf-8").splitlines()
+                 if line.strip() and not line.lstrip().startswith("#")]
     reader = csv.DictReader(lines, delimiter="\t")
     if tuple(reader.fieldnames or ()) != HEADER:
         raise AssertionError(f"VENDORED.tsv header does not match its contract: {HEADER}")

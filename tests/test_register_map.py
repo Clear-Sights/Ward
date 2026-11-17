@@ -40,7 +40,7 @@ class RegisterMapIsBound(unittest.TestCase):
     def _main_with_map(self, transform):
         import register_map
 
-        lines = register_map.MAP.read_text(encoding="utf-8").splitlines()
+        lines = register_map.map_lines()
         with tempfile.TemporaryDirectory() as tmp:
             planted = pathlib.Path(tmp) / "REGISTER-MAP.tsv"
             planted.write_text(transform(lines), encoding="utf-8")
