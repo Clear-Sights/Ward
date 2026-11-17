@@ -4,7 +4,7 @@
 docs/REGISTER.md is this repository's own copy; its former source,
 measure-zero-dev/REGISTER.md, is not among the owner's repositories. It is
 byte-identical to Clear-Sights/Keel docs/REGISTER.md.
-docs/REGISTER-MAP.tsv gives every entry in it one of two verdicts:
+The Register map sheet of RECORDS.xlsx gives every entry in it one of two verdicts:
 
   RUNNER          a named row of the ordered denial table, or a structural
                   property of the dispatcher, denies the act the entry names
@@ -28,12 +28,24 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "plugin"))
 REGISTER = ROOT / "docs" / "REGISTER.md"
-MAP = ROOT / "docs" / "REGISTER-MAP.tsv"
+MAP = ROOT / "RECORDS.xlsx"   # the Register map sheet; a planted copy is a .tsv
 VERDICTS = {"RUNNER", "OUT-OF-SUBJECT"}
 ENTRY_RX = re.compile(r"^([A-G]\d+)\s+[A-Z]")
 ROWS = 11
 
 from ward.checks import CHECKS  # noqa: E402
+try:  # a package import, or the script run from its own folder
+    from tools import xlsx  # noqa: E402
+except ImportError:
+    import xlsx  # noqa: E402
+
+
+def map_lines():
+    """The map as the tab-separated lines it was kept as."""
+    if MAP.suffix == ".xlsx":
+        return ["\t".join(row) for row in dict(xlsx.read_xlsx(MAP))["Register map"]]
+    return MAP.read_text(encoding="utf-8").splitlines()
+
 
 
 def parse_row(n, line, table):
@@ -73,7 +85,7 @@ def main():
     if len(table) != ROWS:
         errors.append(f"denial table carries {len(table)}, not the stated {ROWS}")
 
-    for n, line in enumerate(MAP.read_text(encoding="utf-8").splitlines()[1:], start=2):
+    for n, line in enumerate(map_lines()[1:], start=2):
         if not line.strip():
             continue
         row, problems = parse_row(n, line, table)

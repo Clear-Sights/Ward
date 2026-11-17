@@ -49,3 +49,32 @@ jobs:
         run: python3 eval/replay.py
       - name: README measurements are current
         run: python3 tools/render_readme_claims.py --check
+      - name: the row diff of each changed workbook, base against head, to the step summary
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE" "$HEAD"
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import difflib, os, subprocess, sys, tempfile
+          sys.path.insert(0, 'tools')
+          import xlsx
+          def sheets(ref, path):
+              r = subprocess.run(['git', 'show', ref + ':' + path], capture_output=True)
+              if r.returncode:
+                  return {}
+              with tempfile.NamedTemporaryFile(suffix='.xlsx') as f:
+                  f.write(r.stdout)
+                  f.flush()
+                  return {n: ['\t'.join(row) for row in rows] for n, rows in xlsx.read_xlsx(f.name)}
+          base, head = os.environ['BASE'], os.environ['HEAD']
+          names = subprocess.run(['git', 'diff', '--name-only', base, head, '--', '*.xlsx'],
+                                 capture_output=True, text=True, check=True).stdout.split()
+          for path in names:
+              a, b = sheets(base, path), sheets(head, path)
+              print('### ' + path)
+              for sheet in sorted(set(a) | set(b)):
+                  d = list(difflib.unified_diff(a.get(sheet, []), b.get(sheet, []), 'base', 'head', n=0, lineterm=''))
+                  print('#### %s\n' % sheet + ('```diff\n' + '\n'.join(d) + '\n```' if d else 'no change'))
+          PY
