@@ -81,7 +81,7 @@ def research(root):
 def gate(files, rows, no_index=False):
     with tempfile.TemporaryDirectory() as tmp:
         if not no_index:
-            xlsx.write_xlsx(os.path.join(tmp, INDEX), [("Index", [["id", "repo", "path", "sheets", "sha256", "owner"]] + rows)])
+            xlsx.write_xlsx(os.path.join(tmp, INDEX), [("Index", [["id", "repo", "path", "sheets", "sha256", "branch"]] + rows)])
         for name, data in files.items():
             os.makedirs(os.path.dirname(os.path.join(tmp, name)), exist_ok=True)
             pathlib.Path(tmp, name).write_bytes(data)
@@ -125,8 +125,8 @@ class Records(unittest.TestCase):
         self.red("is in Register map and in Superseded",
                  planted(lambda b: b["Superseded"].append([b["Register map"][1][0], "Register map", "why", "2026-11-17"])))
 
-    mine = ["X1", "Ward", "RESEARCH.xlsx", "Register map", "a" * 64, "Ward"]
-    theirs = ["X2", "Keel", "MEASURED.xlsx", "Measured", hashlib.sha256(b"theirs").hexdigest(), "Keel"]
+    mine = ["X1", "Ward", "RESEARCH.xlsx", "Register map", "a" * 64, "main"]
+    theirs = ["X2", "Keel", "MEASURED.xlsx", "Measured", hashlib.sha256(b"theirs").hexdigest(), "main"]
     own = {"RESEARCH.xlsx": b"m"}
 
     def test_the_research_gate(self):
