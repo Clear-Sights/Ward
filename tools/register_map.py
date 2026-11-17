@@ -4,7 +4,7 @@
 docs/REGISTER.md is this repository's own copy; its former source,
 measure-zero-dev/REGISTER.md, is not among the owner's repositories. It is
 byte-identical to Clear-Sights/Keel docs/REGISTER.md.
-The Register map sheet of RECORDS.xlsx gives every entry in it one of two verdicts:
+The Register map sheet of RESEARCH.xlsx gives every entry in it one of two verdicts:
 
   RUNNER          a named row of the ordered denial table, or a structural
                   property of the dispatcher, denies the act the entry names
@@ -28,7 +28,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "plugin"))
 REGISTER = ROOT / "docs" / "REGISTER.md"
-MAP = ROOT / "RECORDS.xlsx"   # the Register map sheet; a planted copy is a .tsv
+MAP = ROOT / "RESEARCH.xlsx"   # the Register map sheet; a planted copy is a .tsv
 VERDICTS = {"RUNNER", "OUT-OF-SUBJECT"}
 ENTRY_RX = re.compile(r"^([A-G]\d+)\s+[A-Z]")
 ROWS = 11

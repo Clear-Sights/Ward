@@ -172,8 +172,8 @@ def constant_dependencies(path, symbol, root):
 
 
 def rows(root):
-    """The VENDORED rows: the Vendored sheet of RECORDS.xlsx where the root holds one, else VENDORED.tsv (a planted tree)."""
-    book = root / "RECORDS.xlsx"
+    """The VENDORED rows: the Vendored sheet of RESEARCH.xlsx where the root holds one, else VENDORED.tsv (a planted tree)."""
+    book = root / "RESEARCH.xlsx"
     if book.exists():
         lines = ["\t".join(row) for row in dict(xlsx.read_xlsx(book))["Vendored"]]
     else:
