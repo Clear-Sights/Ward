@@ -1,4 +1,4 @@
-"""RECORDS.xlsx, the records of this repository as one workbook (Vendored, Vendored notes, Register map, Superseded), and
+"""RESEARCH.xlsx, the records of this repository as one workbook (Vendored, Vendored notes, Register map, Superseded), and
 the research gate: a workbook is accepted when the Hub's index lists it. This repository's own, at the path the index gives;
 another repository's only as a read-only copy at research/REPO/PATH whose digest is the index's; no workbook the index does
 not list. RESEARCH-INDEX.xlsx here is a copy of the Hub's; the Hub's `check.py --pins` reads red when it is not the Hub's.
@@ -15,7 +15,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 import xlsx  # noqa: E402
 
-BOOK = ROOT / "RECORDS.xlsx"
+BOOK = ROOT / "RESEARCH.xlsx"
 INDEX = "RESEARCH-INDEX.xlsx"
 ME = "Ward"
 HEADS = {
@@ -125,9 +125,9 @@ class Records(unittest.TestCase):
         self.red("is in Register map and in Superseded",
                  planted(lambda b: b["Superseded"].append([b["Register map"][1][0], "Register map", "why", "2026-11-17"])))
 
-    mine = ["X1", "Ward", "RECORDS.xlsx", "Register map", "a" * 64, "Ward"]
+    mine = ["X1", "Ward", "RESEARCH.xlsx", "Register map", "a" * 64, "Ward"]
     theirs = ["X2", "Keel", "MEASURED.xlsx", "Measured", hashlib.sha256(b"theirs").hexdigest(), "Keel"]
-    own = {"RECORDS.xlsx": b"m"}
+    own = {"RESEARCH.xlsx": b"m"}
 
     def test_the_research_gate(self):
         self.assertEqual([], gate(self.own, [self.mine, self.theirs]))
